@@ -61,31 +61,6 @@ if not st.session_state['giris_yapildi']:
                 else:
                     st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
-    # --- BAŞARILI GİRİŞ SONRASI AKILLI YÖNLENDİRME EKRANI ---
-    birlik_adi = st.session_state['birlik']
-    yetki_turu = st.session_state['yetki']
-
-    c_ust1, c_ust2 = st.columns([4, 1])
-    with c_ust1: 
-        st.title(f"🏢 {birlik_adi}")
-        st.subheader(f"Yetkili Modül: {yetki_turu} Deposu")
-    with c_ust2:
-        st.write(f"👤 {st.session_state['kullanici']}")
-        if st.button("🚪 Çıkış Yap"):
-            st.session_state['giris_yapildi'] = False
-            st.rerun()
-            
-    st.divider()
-    
-    st.info(f"Sistem şu anda arka planda *{birlik_adi}* adlı kuruma ait *{yetki_turu}* veri tabanlarını bağlıyor...")
-    
-    if yetki_turu == "Yonetici":
-        st.write("📊 *Yönetici Ekranı:* Tüm depoların özet durumları ve kritik stok alarmları burada görünecek.")
-    elif yetki_turu == "Gida":
-        st.write("🍎 *Gıda Deposu:* Sadece Gıda ürünleri eklenebilecek ve güncellenecek.")
-    elif yetki_turu == "Temizlik":
-        st.write("🧼 *Temizlik Deposu:* Sadece Temizlik ürünleri eklenebilecek ve güncellenecek.")
-    else:
     birlik_adi = st.session_state['birlik']
     yetki_turu = st.session_state['yetki']
 
