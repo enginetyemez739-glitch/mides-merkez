@@ -74,28 +74,56 @@ else:
             bugun = datetime.now()
             uyari_yok = True
             
+            rapor_metni = f"📊 {birlik} - {yetki} Deposu Günlük Rapor\n\n"
+            
             for _, row in df.iterrows():
-                if row['Miktar'] <= row['Kritik Seviye']:
-                    st.warning(f"📉 STOK ALARMI: {row['Ürün Adı']} (Stok No: {row['Stok No']}) bitmek üzere! (Kalan: {row['Miktar']} {row['Birim']})")
-                    uyari_yok = False
                 try:
-                    skt = datetime.strptime(str(row['SKT']), "%Y-%m-%d")
-                    if (skt - bugun).days < 0:
-                        st.error(f"❌ {row['Ürün Adı']} (Stok No: {row['Stok No']}) | {row['Miktar']} {row['Birim']} - TARİHİ GEÇTİ! ({row['SKT']})")
+                    skt_tarihi = datetime.strptime(str(row['SKT']), "%Y-%m-%d")
+                    fark_gun = (skt_tarihi - bugun).days
+                    
+                    if fark_gun < 0:
+                        mesaj = f"❌ {row['Ürün Adı']} (Stok No: {row['Stok No']} | {row['Miktar']} {row['Birim']}) - TARİHİ GEÇTİ! ({row['SKT']})"
+                        st.error(mesaj)
+                        rapor_metni += mesaj + "\n"
+                        uyari_yok = False
+                    elif fark_gun <= 30:
+                        mesaj = f"⚠️ {row['Ürün Adı']} (Stok No: {row['Stok No']} | {row['Miktar']} {row['Birim']}) - SKT'ye {fark_gun} gün kaldı! ({row['SKT']})"
+                        st.warning(mesaj)
+                        rapor_metni += mesaj + "\n"
                         uyari_yok = False
                 except: pass
+
+                if row['Miktar'] <= row['Kritik Seviye']:
+                    mesaj = f"📉 STOK ALARMI: {row['Ürün Adı']} (Stok No: {row['Stok No']}) bitmek üzere! (Kalan: {row['Miktar']} {row['Birim']})"
+                    st.info(mesaj) # Görseldeki mavi/gri kutu tasarımı için
+                    rapor_metni += mesaj + "\n"
+                    uyari_yok = False
             
-            if uyari_yok: st.success("Depoda kritik uyarı bulunmamaktadır.")
+            if uyari_yok:
+                st.success("Depoda kritik uyarı bulunmamaktadır.")
+                rapor_metni += "Tüm stoklar ve tarihler uygun seviyededir."
+            
+            if st.button("📲 Telegram'a Rapor Gönder"):
+                telegram_mesaj_gonder(rapor_metni)
+                st.success("Rapor başarıyla gönderildi!")
             
             st.markdown("---")
-            st.markdown("### 📊 Stok Numarasına Göre Genel Toplamlar")
+            st.markdown("### 📦 Stok Numarasına Göre Genel Toplamlar")
             if not df.empty:
                 ozet_df = df.groupby(['Stok No', 'Ürün Adı', 'Birim'])['Miktar'].sum().reset_index()
                 ozet_df = ozet_df.rename(columns={'Miktar': 'Toplam Miktar'})
-                st.dataframe(ozet_df, use_container_width=True)
+                st.dataframe(ozet_df, use_container_width=True, hide_index=True)
             
             st.markdown("### 🔍 Detaylı Parti Listesi")
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            # --- Otomatik Sabah Raporu Kontrolü ---
+            su_an = datetime.now()
+            if su_an.hour == 8 and 'sabah_raporu_gonderildi' not in st.session_state:
+                telegram_mesaj_gonder(rapor_metni)
+                st.session_state['sabah_raporu_gonderildi'] = True
+            elif su_an.hour != 8 and 'sabah_raporu_gonderildi' in st.session_state:
+                del st.session_state['sabah_raporu_gonderildi']
 
         with t_ekle:
             with st.form("ekle"):
