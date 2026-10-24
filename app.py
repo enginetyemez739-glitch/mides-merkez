@@ -82,8 +82,77 @@ else:
         try:
             aktif_tablo = client.open(tablo_adi).get_worksheet(0)
             df_depo = pd.DataFrame(aktif_tablo.get_all_records())
-            st.success(f"✅ {tablo_adi} veri tabanına bağlandı.")
-            st.dataframe(df_depo, use_container_width=True)
+            
+            # --- SEKMELER (TABS) OLUŞTURMA ---
+            tab1, tab2, tab3 = st.tabs(["📦 Stok Durumu", "➕ Yeni Ürün Ekle", "🔄 Stok Güncelle / Düş"])
+            
+            # 1. SEKME: MEVCUT STOK
+            with tab1:
+                st.subheader("Mevcut Depo Durumu")
+                st.dataframe(df_depo, use_container_width=True)
+                
+            # 2. SEKME: YENİ ÜRÜN EKLEME
+            with tab2:
+                st.subheader("Depoya Yeni Ürün Ekle")
+                with st.form("urun_ekle_form"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        yeni_stok_no = st.text_input("Stok No")
+                        yeni_urun_adi = st.text_input("Ürün Adı")
+                        yeni_miktar = st.number_input("Miktar", min_value=0)
+                    with col2:
+                        yeni_birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket"])
+                        yeni_uretim = st.date_input("Üretim Tarihi")
+                        yeni_skt = st.date_input("Son Kullanma Tarihi (SKT)")
+                    
+                    ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
+                    if ekle_btn:
+                        if yeni_urun_adi != "":
+                            # Yeni ID belirleme
+                            yeni_id = 1 if df_depo.empty else int(df_depo['ID'].max()) + 1
+                            bugun = datetime.now().strftime("%Y-%m-%d")
+                            
+                            yeni_satir = [yeni_id, yeni_stok_no, yeni_urun_adi, yeni_miktar, yeni_birim, bugun, str(yeni_skt), str(yeni_uretim)]
+                            aktif_tablo.append_row(yeni_satir)
+                            st.success(f"✅ {yeni_urun_adi} başarıyla eklendi! Sayfa yenileniyor...")
+                            st.rerun()
+                        else:
+                            st.error("Lütfen ürün adını giriniz.")
+                            
+            # 3. SEKME: STOK GÜNCELLEME VE DÜŞME
+            with tab3:
+                st.subheader("Mevcut Ürünün Stok Miktarını Değiştir")
+                if not df_depo.empty:
+                    with st.form("stok_guncelle_form"):
+                        secilen_urun = st.selectbox("İşlem Yapılacak Ürünü Seçin", df_depo['Ürün Adı'].tolist())
+                        islem_turu = st.radio("İşlem Türü", ["Stok Düş (Çıkış)", "Stok Ekle (Giriş)"], horizontal=True)
+                        islem_miktari = st.number_input("Miktar", min_value=1)
+                        
+                        guncelle_btn = st.form_submit_button("Güncelle", use_container_width=True)
+                        if guncelle_btn:
+                            # Seçilen ürünün satırını bulma
+                            satir_index = df_depo[df_depo['Ürün Adı'] == secilen_urun].index[0]
+                            tablo_satir_no = int(satir_index) + 2 # Google Sheets'te başlıklar 1. satırdır
+                            
+                            mevcut_miktar = int(df_depo.loc[satir_index, 'Miktar'])
+                            
+                            if islem_turu == "Stok Düş (Çıkış)":
+                                yeni_stok = mevcut_miktar - islem_miktari
+                            else:
+                                yeni_stok = mevcut_miktar + islem_miktari
+                                
+                            if yeni_stok < 0:
+                                st.error("❌ Stok miktarı 0'ın altına düşemez!")
+                            else:
+                                # 4. sütun (D sütunu) 'Miktar' olduğu için orayı güncelliyoruz
+                                aktif_tablo.update_cell(tablo_satir_no, 4, yeni_stok)
+                                st.success(f"✅ {secilen_urun} stoğu güncellendi. Yeni miktar: {yeni_stok}. Sayfa yenileniyor...")
+                                st.rerun()
+                else:
+                    st.info("Depoda güncellenecek ürün bulunmuyor.")
+                    
+        except Exception as e:
+            st.error(f"❌ '{tablo_adi}' bulunamadı veya servis hesabına yetki verilmedi.")
         except Exception as e:
             st.error(f"❌ '{tablo_adi}' bulunamadı veya servis hesabına yetki verilmedi.")
     elif yetki_turu == "Yonetici":
