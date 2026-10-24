@@ -86,4 +86,30 @@ else:
     elif yetki_turu == "Temizlik":
         st.write("🧼 *Temizlik Deposu:* Sadece Temizlik ürünleri eklenebilecek ve güncellenecek.")
     else:
-        st.warning("Bu yetki türüne ait bir ekran bulunamadı.")
+    birlik_adi = st.session_state['birlik']
+    yetki_turu = st.session_state['yetki']
+
+    c_ust1, c_ust2 = st.columns([4, 1])
+    with c_ust1: 
+        st.title(f"🏢 {birlik_adi}")
+        st.subheader(f"Yetkili Modül: {yetki_turu} Deposu")
+    with c_ust2:
+        st.write(f"👤 {st.session_state['kullanici']}")
+        if st.button("🚪 Çıkış Yap"):
+            st.session_state['giris_yapildi'] = False
+            st.rerun()
+            
+    st.divider()
+    
+    tablo_adi = f"{birlik_adi} - {yetki_turu} Deposu"
+    
+    if yetki_turu in ["Gida", "Temizlik", "Esya", "Kiyafet"]:
+        try:
+            aktif_tablo = client.open(tablo_adi).get_worksheet(0)
+            df_depo = pd.DataFrame(aktif_tablo.get_all_records())
+            st.success(f"✅ {tablo_adi} veri tabanına bağlandı.")
+            st.dataframe(df_depo, use_container_width=True)
+        except Exception as e:
+            st.error(f"❌ '{tablo_adi}' bulunamadı veya servis hesabına yetki verilmedi.")
+    elif yetki_turu == "Yonetici":
+        st.info("📊 Yönetici paneli tüm alt depoları okuyacak şekilde yapılandırılacak.")
