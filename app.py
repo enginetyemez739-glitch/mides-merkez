@@ -95,6 +95,54 @@ else:
             
             with tab1:
                 st.subheader("Mevcut Depo Durumu")
+                
+                if not df_depo.empty:
+                    # --- GÖRSEL UYARI PANOSU ---
+                    st.markdown("### 🚨 Sistem Uyarıları")
+                    uyari_var = False
+                    
+                    # 1. Kritik Stok Kontrolü (20 birim altı)
+                    df_depo['Miktar'] = pd.to_numeric(df_depo['Miktar'], errors='coerce')
+                    kritik_stoklar = df_depo[df_depo['Miktar'] < 20]
+                    
+                    if not kritik_stoklar.empty:
+                        uyari_var = True
+                        urunler_str = ", ".join(kritik_stoklar['Ürün Adı'].astype(str).tolist())
+                        st.error(f"📉 *Kritik Stok Seviyesi (20 Altı):* {urunler_str}")
+                    
+                    # 2. SKT Kontrolü (Tarihi geçenler ve 30 günden az kalanlar)
+                    bugun = datetime.now()
+                    skt_yaklasanlar = []
+                    skt_gecenler = []
+                    
+                    for index, row in df_depo.iterrows():
+                        try:
+                            skt_tarihi = datetime.strptime(str(row['SKT']), "%Y-%m-%d")
+                            fark = (skt_tarihi - bugun).days
+                            
+                            if fark < 0:
+                                skt_gecenler.append(row['Ürün Adı'])
+                            elif fark <= 30: 
+                                skt_yaklasanlar.append((row['Ürün Adı'], fark))
+                        except:
+                            pass # SKT formatı hatalı veya boşsa atla
+                            
+                    if len(skt_gecenler) > 0:
+                        uyari_var = True
+                        gecen_urunler_str = ", ".join(skt_gecenler)
+                        st.error(f"❌ *SKT'si GEÇMİŞ Ürünler:* {gecen_urunler_str}")
+                        
+                    if len(skt_yaklasanlar) > 0:
+                        uyari_var = True
+                        for urun, gun in skt_yaklasanlar:
+                            st.warning(f"⏳ *SKT Yaklaşıyor:* {urun} (Son {gun} gün)")
+                            
+                    if not uyari_var:
+                        st.success("✅ Tüm stoklar yeterli seviyede ve SKT riski taşıyan ürün bulunmuyor.")
+                        
+                    st.markdown("---")
+                
+                # Mevcut tabloyu uyarıların altında göster
                 st.dataframe(df_depo, use_container_width=True)
                 
             with tab2:
