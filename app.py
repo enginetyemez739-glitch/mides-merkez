@@ -71,59 +71,67 @@ else:
 
         with t_ozet:
             st.markdown("### 📋 Depo Uyarıları")
-            bugun = datetime.now()
-            uyari_yok = True
+        krt_sayisi = 0
+        telegram_raporu = "⚠️ MİDES KRİTİK UYARI RAPORU ⚠️\n\n"
+        
+        for index, row in df.iterrows():
+            urun_adi = str(row.get('Ürün Adı', 'Bilinmeyen Ürün')).strip()
+            stok_no = str(row.get('Stok No', '-'))
+            miktar_metni = str(row.get('Miktar', '0')).strip()
+            birim = str(row.get('Birim', '')).strip()
             
-            rapor_metni = f"📊 {birlik} - {yetki} Deposu Günlük Rapor\n\n"
-            
-            for _, row in df.iterrows():
-                try:
-                    skt_tarihi = datetime.strptime(str(row['SKT']), "%Y-%m-%d")
-                    fark_gun = (skt_tarihi - bugun).days
+            try:
+                skt_metni = str(row.get('SKT', '')).strip()
+                if skt_metni and skt_metni != "-" and skt_metni.lower() != "nan":
+                    skt = datetime.strptime(skt_metni, '%Y-%m-%d').date()
+                    kalan = (skt - bugun).days
+                    uyari_baslik = f"{urun_adi} (Stok No: {stok_no} | {miktar_metni} {birim})"
                     
-                    if fark_gun < 0:
-                        mesaj = f"❌ {row['Ürün Adı']} (Stok No: {row['Stok No']} | {row['Miktar']} {row['Birim']}) - TARİHİ GEÇTİ! ({row['SKT']})"
-                        st.error(mesaj)
-                        rapor_metni += mesaj + "\n"
-                        uyari_yok = False
-                    elif fark_gun <= 30:
-                        mesaj = f"⚠️ {row['Ürün Adı']} (Stok No: {row['Stok No']} | {row['Miktar']} {row['Birim']}) - SKT'ye {fark_gun} gün kaldı! ({row['SKT']})"
-                        st.warning(mesaj)
-                        rapor_metni += mesaj + "\n"
-                        uyari_yok = False
-                except: pass
+                    if kalan < 0:
+                        st.error(f"❌ {uyari_baslik} - TARİHİ GEÇTİ! ({skt_metni})")
+                        telegram_raporu += f"❌ {uyari_baslik} - TARİHİ GEÇTİ!\n"
+                        krt_sayisi += 1
+                    elif 0 <= kalan <= 30:
+                        st.warning(f"⚠️ {uyari_baslik} - SKT'ye {kalan} gün kaldı! ({skt_metni})")
+                        telegram_raporu += f"⚠️ {uyari_baslik} - {kalan} gün kaldı!\n"
+                        krt_sayisi += 1
+            except: pass
+            
+            try:
+                kritik_metni = str(row.get('Kritik Stok', '10')).strip()
+                if not miktar_metni or miktar_metni.lower() == "nan": miktar_metni = "0"
+                if not kritik_metni or kritik_metni.lower() == "nan": kritik_metni = "10"
+                
+                miktar_val = float(miktar_metni)
+                kritik_val = float(kritik_metni)
+                
+                if miktar_val <= kritik_val:
+                    st.error(f"📉 STOK ALARMI: {urun_adi} (Stok No: {stok_no}) bitmek üzere! (Kalan: {int(miktar_val)} {birim})")
+                    telegram_raporu += f"📉 ALARM: {urun_adi} (Stok No: {stok_no}) (Kalan: {int(miktar_val)} {birim})\n"
+                    krt_sayisi += 1
+            except: pass
 
-                if row['Miktar'] <= row['Kritik Seviye']:
-                    mesaj = f"📉 STOK ALARMI: {row['Ürün Adı']} (Stok No: {row['Stok No']}) bitmek üzere! (Kalan: {row['Miktar']} {row['Birim']})"
-                    st.info(mesaj) # Görseldeki mavi/gri kutu tasarımı için
-                    rapor_metni += mesaj + "\n"
-                    uyari_yok = False
+        if krt_sayisi == 0:
+            st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
+            telegram_raporu += "✅ Kritik ürün bulunmamaktadır. Depo güvende!"
+
+        if st.button("📲 Telegram'a Rapor Gönder", type="primary"):
+            telegram_mesaj_gonder(telegram_raporu)
+            st.toast("✅ Gönderildi!")
             
-            if uyari_yok:
-                st.success("Depoda kritik uyarı bulunmamaktadır.")
-                rapor_metni += "Tüm stoklar ve tarihler uygun seviyededir."
-            
-            if st.button("📲 Telegram'a Rapor Gönder"):
-                telegram_mesaj_gonder(rapor_metni)
-                st.success("Rapor başarıyla gönderildi!")
-            
-            st.markdown("---")
-            st.markdown("### 📦 Stok Numarasına Göre Genel Toplamlar")
-            if not df.empty:
-                ozet_df = df.groupby(['Stok No', 'Ürün Adı', 'Birim'])['Miktar'].sum().reset_index()
-                ozet_df = ozet_df.rename(columns={'Miktar': 'Toplam Miktar'})
-                st.dataframe(ozet_df, use_container_width=True, hide_index=True)
-            
-            st.markdown("### 🔍 Detaylı Parti Listesi")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            # --- Otomatik Sabah Raporu Kontrolü ---
-            su_an = datetime.now()
-            if su_an.hour == 8 and 'sabah_raporu_gonderildi' not in st.session_state:
-                telegram_mesaj_gonder(rapor_metni)
-                st.session_state['sabah_raporu_gonderildi'] = True
-            elif su_an.hour != 8 and 'sabah_raporu_gonderildi' in st.session_state:
-                del st.session_state['sabah_raporu_gonderildi']
+        st.divider()
+        st.markdown("### 📦 Stok Numarasına Göre Genel Toplamlar")
+        try:
+            df['Miktar_Sayi'] = pd.to_numeric(df['Miktar'], errors='coerce').fillna(0)
+            toplam_stok_df = df.groupby('Stok No').agg({'Ürün Adı': 'first', 'Miktar_Sayi': 'sum', 'Birim': 'first'}).reset_index()
+            toplam_stok_df.rename(columns={'Miktar_Sayi': 'Toplam Miktar'}, inplace=True)
+            toplam_stok_df = toplam_stok_df[['Stok No', 'Ürün Adı', 'Toplam Miktar', 'Birim']]
+            st.dataframe(toplam_stok_df, use_container_width=True, hide_index=True)
+        except: st.info("Toplamlar hesaplanırken hata oluştu.")
+
+        st.markdown("### 🔍 Detaylı Parti Listesi")
+        gosterilecek_df = df.drop(columns=['Resim Yolu', 'Miktar_Sayi'], errors='ignore')
+        st.dataframe(gosterilecek_df, use_container_width=True, hide_index=True)
 
         with t_ekle:
             with st.form("ekle"):
