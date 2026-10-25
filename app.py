@@ -11,8 +11,12 @@ import numpy as np
 import json
 import gspread
 from google.oauth2.service_account import Credentials
+import hashlib
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
+
+def sifre_hashle(sifre):
+    return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
 # --- GİZLİ KASA AYARLARI ---
 try:
@@ -101,7 +105,9 @@ if st.session_state['sifre_degistirme_modu']:
             satir_no = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].index[0] + 2
             bugun = datetime.today().strftime('%Y-%m-%d')
             
-            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre)
+            # Şifreyi şifreleyerek (hash) tabloya yazma
+            yeni_sifre_hash = sifre_hashle(yeni_sifre)
+            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre_hash)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
             
             if 'İlk Giriş' in df_kullanicilar.columns:
@@ -129,7 +135,12 @@ if not st.session_state['giris_yapildi']:
             kadi_input = st.text_input("Kullanıcı Adı")
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
-                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adı'] == kadi_input) & (df_kullanicilar['Şifre'] == str(sifre_input))]
+                # Melez şifre kontrolü: Hem düz metni hem de hashlenmiş versiyonu kabul et
+                girilen_hash = sifre_hashle(sifre_input)
+                kullanici = df_kullanicilar[
+                    (df_kullanicilar['Kullanıcı Adı'] == kadi_input) & 
+                    ((df_kullanicilar['Şifre'].astype(str) == str(sifre_input)) | (df_kullanicilar['Şifre'].astype(str) == girilen_hash))
+                ]
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
