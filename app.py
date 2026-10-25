@@ -119,6 +119,12 @@ if st.session_state['sifre_degistirme_modu']:
     st.stop()
 
 if not st.session_state['giris_yapildi']:
+    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
+    with c_img2:
+        try:
+            st.image("amblem.png", use_container_width=True)
+        except:
+            pass
     st.markdown("<h1 style='text-align: center;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
