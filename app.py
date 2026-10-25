@@ -42,9 +42,15 @@ except:
 
 try:
     ws_malzemeler = sheet.worksheet("Malzemeler")
+    headers = ws_malzemeler.row_values(1)
+    if "Alım Türü" not in headers:
+        ws_malzemeler.update_cell(1, 12, "Alım Türü")
+        ws_malzemeler.update_cell(1, 13, "Sözleşme No")
+        ws_malzemeler.update_cell(1, 14, "Sözleşme Tarihi")
+        ws_malzemeler.update_cell(1, 15, "Sözleşme Bitiş Tarihi")
 except:
     ws_malzemeler = sheet.add_worksheet(title="Malzemeler", rows="1000", cols="20")
-    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok"])
+    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi"])
 
 try:
     ws_hareket = sheet.worksheet("Hareket_Gecmisi")
@@ -60,7 +66,7 @@ def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
 def verileri_getir():
     kayitlar = ws_malzemeler.get_all_records()
     if not kayitlar:
-        return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok"])
+        return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi"])
     return pd.DataFrame(kayitlar)
 
 def hareketleri_getir():
@@ -181,7 +187,7 @@ else:
     c_ust1, c_ust2 = st.columns([4, 1])
     with c_ust1: st.title("📦 MİDES - Merkezi İkmal ve Depo Sistemi")
     with c_ust2:
-        st.write(f"👤 {st.session_state['kullanici']}")
+        st.write(f"👤 {st.session_state['kullanici']} ({'Yönetici' if st.session_state['rol'] == 'admin' else 'Personel'})")
         if st.button("🔄 Şifre Değiştir"):
             st.session_state['sifre_degistirme_modu'] = True
             st.rerun()
@@ -189,7 +195,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    sekme1, sekme2, sekme3, sekme6, sekme4, sekme5 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş"])
+    sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş", "📑 Sözleşmeler"])
 
     with sekme1:
         st.markdown("### 📋 Depo Uyarıları")
@@ -265,20 +271,35 @@ else:
             urun_adi = st.text_input("Ürün Adı")
             miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
             birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket"])
+            alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
             
         with col2:
             kritik_seviye = st.number_input("Kritik Uyarı Seviyesi", min_value=1, value=20)
             uretim_tarihi = st.date_input("Üretim Tarihi")
             skt = st.date_input("Son Kullanma Tarihi (SKT)")
+            
+            st.markdown("---")
+            sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
+            sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
+            sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
+            
             ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         
         if ekle_btn:
             if urun_adi and stok_no:
                 bugun_tarih = datetime.now().strftime("%Y-%m-%d")
                 yeni_id = 1 if df.empty else int(df['ID'].max()) + 1
-                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye]
-                ws_malzemeler.append_row(yeni_satir)
-                log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, "Sisteme ilk kez eklendi")
+                
+                s_no = sozlesme_no if alim_turu == "Piyasa Alımı" else "-"
+                s_tar = str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-"
+                s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
+
+                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit]
+                
+                satir_tam = yeni_satir + [""] * max(0, len(ws_malzemeler.row_values(1)) - len(yeni_satir))
+                ws_malzemeler.append_row(satir_tam[:len(ws_malzemeler.row_values(1))])
+                
+                log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
                 st.success(f"✅ {urun_adi} depoya başarıyla kaydedildi! Sayfa yenileniyor...")
                 st.rerun()
             else:
@@ -412,3 +433,45 @@ else:
             )
         else:
             st.info("Henüz geçmiş bir işlem bulunmamaktadır.")
+            
+    with sekme7:
+        if st.session_state['rol'] == 'admin':
+            st.subheader("📑 Piyasa Alımı & Sözleşme Takibi")
+            
+            if 'Alım Türü' in df.columns:
+                df_piyasa = df[df['Alım Türü'] == 'Piyasa Alımı'].copy()
+                
+                if not df_piyasa.empty:
+                    sozlesme_ozet = df_piyasa[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Kritik Stok', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']]
+                    st.dataframe(sozlesme_ozet, use_container_width=True, hide_index=True)
+                    
+                    st.markdown("### ⏰ Sözleşme ve Stok Uyarıları")
+                    for _, row in df_piyasa.iterrows():
+                        bitis_str = str(row.get('Sözleşme Bitiş Tarihi', '')).strip()
+                        
+                        miktar_metni = str(row.get('Miktar', '0')).strip()
+                        kritik_metni = str(row.get('Kritik Stok', '10')).strip()
+                        miktar_val = float(miktar_metni) if miktar_metni and miktar_metni.lower() != "nan" else 0.0
+                        kritik_val = float(kritik_metni) if kritik_metni and kritik_metni.lower() != "nan" else 10.0
+                        
+                        uyari_metni = f"**Sözleşme No:** {row.get('Sözleşme No', '-')} | **Ürün:** {row.get('Ürün Adı', '-')} (Mevcut: {int(miktar_val)} {row.get('Birim', '')})"
+
+                        if miktar_val <= kritik_val:
+                            st.error(f"📉 STOK ALARMI! {uyari_metni} - Kritik sınır ({int(kritik_val)}) altına düştü!")
+
+                        if bitis_str and bitis_str != "-":
+                            try:
+                                bitis_tarihi = datetime.strptime(bitis_str, '%Y-%m-%d').date()
+                                kalan_gun = (bitis_tarihi - bugun).days
+                                
+                                if kalan_gun < 0:
+                                    st.error(f"❌ SÜRESİ DOLDU! {uyari_metni} - Bitiş: {bitis_str}")
+                                elif 0 <= kalan_gun <= 30:
+                                    st.warning(f"⚠️ DİKKAT! {uyari_metni} - Sözleşmenin bitmesine **{kalan_gun} gün** kaldı.")
+                            except: pass
+                else:
+                    st.info("Şu an sistemde kayıtlı bir 'Piyasa Alımı' sözleşmesi bulunmamaktadır.")
+            else:
+                st.info("Sözleşme sistemi henüz aktif edilmedi. Yeni bir piyasa alımı ürünü eklendiğinde liste aktif olacaktır.")
+        else:
+            st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
