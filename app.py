@@ -281,4 +281,64 @@ else:
             urun = df[df['ID'] == secili_id].iloc[0]
             urun_miktar = int(float(str(urun.get('Miktar', '0')).strip() or '0'))
             
-            with st.
+            with st.form("guncelleme_formu"):
+                c_g1, c_g2 = st.columns(2)
+                with c_g1:
+                    yeni_stok = st.text_input("Stok No:", value=str(urun.get('Stok No', '')))
+                    cikis = st.number_input("➖ Çıkış:", min_value=0, max_value=urun_miktar, step=1)
+                    giris = st.number_input("➕ Giriş:", min_value=0, step=1)
+                with c_g2:
+                    try: skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
+                    except: skt_val = bugun
+                    y_skt = st.date_input("SKT:", value=skt_val)
+                    y_kritik = st.number_input("Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
+                
+                if st.form_submit_button("💾 Kaydet", type="primary"):
+                    satir = df[df['ID'] == secili_id].index[0] + 2
+                    ws_malzemeler.update_cell(satir, 2, yeni_stok) 
+                    ws_malzemeler.update_cell(satir, 4, urun_miktar - cikis + giris)  
+                    ws_malzemeler.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
+                    ws_malzemeler.update_cell(satir, 11, y_kritik) 
+                    
+                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "")
+                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "")
+                    st.success("Güncellendi!")
+                    st.rerun()
+
+    with sekme6:
+        st.subheader("⚡ Hızlı İşlem")
+        aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
+        resim = st.camera_input("📷 Veya QR Okut")
+        bulunan = str(aranan_stok).strip() if aranan_stok else None
+        
+        if resim:
+            cv_img = cv2.cvtColor(np.array(Image.open(resim)), cv2.COLOR_RGB2BGR)
+            data, _, _ = cv2.QRCodeDetector().detectAndDecode(cv_img)
+            if data:
+                try: bulunan = next((s.split("Stok No:")[1].strip() for s in data.split('\n') if "Stok No:" in s), None)
+                except: pass
+                
+        if bulunan:
+            eslesen = df[df['Stok No'].astype(str).str.strip() == bulunan]
+            if not eslesen.empty:
+                st.info(f"📦 Bulunan Ürün: {eslesen.iloc[0]['Ürün Adı']} (Mevcut: {eslesen.iloc[0]['Miktar']})")
+                with st.form("hizli"):
+                    m_dus = st.number_input("➖ Çıkar:", min_value=0, step=1)
+                    m_ekle = st.number_input("➕ Ekle:", min_value=0, step=1)
+                    if st.form_submit_button("💾 Güncelle", type="primary"):
+                        if m_dus > 0 or m_ekle > 0:
+                            ws_malzemeler.update_cell(eslesen.index[0] + 2, 4, int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle)
+                            st.success("Stok güncellendi!")
+                            st.rerun()
+            else: st.error("❌ Ürün bulunamadı.")
+
+    with sekme4:
+        st.subheader("🪪 Ürün Tanıtım Kartı")
+        if not df.empty:
+            secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+            ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
+            st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
+
+    with sekme5:
+        st.subheader("📝 Hareket Geçmişi")
+        st.dataframe(hareketleri_getir(),
