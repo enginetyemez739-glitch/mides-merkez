@@ -1,7 +1,6 @@
 streamlit
 pandas
+qrcode[pil]
+opencv-python-headless
 gspread
 google-auth
-qrcode
-requests
-Pillow
