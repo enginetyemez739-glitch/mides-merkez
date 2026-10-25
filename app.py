@@ -43,14 +43,17 @@ except:
 try:
     ws_malzemeler = sheet.worksheet("Malzemeler")
     headers = ws_malzemeler.row_values(1)
+    # Eksik sözleşme sütunlarını tamamla
     if "Alım Türü" not in headers:
         ws_malzemeler.update_cell(1, 12, "Alım Türü")
         ws_malzemeler.update_cell(1, 13, "Sözleşme No")
         ws_malzemeler.update_cell(1, 14, "Sözleşme Tarihi")
         ws_malzemeler.update_cell(1, 15, "Sözleşme Bitiş Tarihi")
+    if "Sözleşme Kritik" not in ws_malzemeler.row_values(1):
+        ws_malzemeler.update_cell(1, 16, "Sözleşme Kritik")
 except:
     ws_malzemeler = sheet.add_worksheet(title="Malzemeler", rows="1000", cols="20")
-    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi"])
+    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik"])
 
 try:
     ws_hareket = sheet.worksheet("Hareket_Gecmisi")
@@ -66,7 +69,7 @@ def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
 def verileri_getir():
     kayitlar = ws_malzemeler.get_all_records()
     if not kayitlar:
-        return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi"])
+        return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik"])
     return pd.DataFrame(kayitlar)
 
 def hareketleri_getir():
@@ -125,7 +128,7 @@ if st.session_state['sifre_degistirme_modu']:
             st.session_state['ilk_giris_uyarisi'] = False
             st.stop()
         else:
-            st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+            st.error("Şifler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
     st.stop()
 
 if not st.session_state['giris_yapildi']:
@@ -274,7 +277,7 @@ else:
             alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
             
         with col2:
-            kritik_seviye = st.number_input("Kritik Uyarı Seviyesi", min_value=1, value=20)
+            kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
             uretim_tarihi = st.date_input("Üretim Tarihi")
             skt = st.date_input("Son Kullanma Tarihi (SKT)")
             
@@ -282,6 +285,7 @@ else:
             sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
             sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
             sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
+            sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı (Örn: 20 Kg)", min_value=0.0, value=20.0, step=1.0)
             
             ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         
@@ -293,8 +297,9 @@ else:
                 s_no = sozlesme_no if alim_turu == "Piyasa Alımı" else "-"
                 s_tar = str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-"
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
+                s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
 
-                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit]
+                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt]
                 
                 satir_tam = yeni_satir + [""] * max(0, len(ws_malzemeler.row_values(1)) - len(yeni_satir))
                 ws_malzemeler.append_row(satir_tam[:len(ws_malzemeler.row_values(1))])
@@ -306,9 +311,9 @@ else:
                 st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
 
     with sekme3:
-        st.subheader("🔄 Ürün Bilgilerini Güncelle")
+        st.subheader("🔄 Ürün Bilgilerini Güncelle ve Sil")
         if not df.empty:
-            secili_guncelleme = st.selectbox("Ürünü seçin:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+            secili_guncelleme = st.selectbox("İşlem yapılacak ürünü seçin:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
             secili_id = int(secili_guncelleme.split(" - ")[0])
             urun = df[df['ID'] == secili_id].iloc[0]
             urun_miktar = int(float(str(urun.get('Miktar', '0')).strip() or '0'))
@@ -323,9 +328,13 @@ else:
                     try: skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
                     except: skt_val = bugun
                     y_skt = st.date_input("SKT:", value=skt_val)
-                    y_kritik = st.number_input("Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
+                    y_kritik = st.number_input("Depo Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
                 
-                if st.form_submit_button("💾 Kaydet", type="primary"):
+                c_btn1, c_btn2 = st.columns(2)
+                kaydet_tik = c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary")
+                sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
+                
+                if kaydet_tik:
                     satir = df[df['ID'] == secili_id].index[0] + 2
                     ws_malzemeler.update_cell(satir, 2, yeni_stok) 
                     ws_malzemeler.update_cell(satir, 4, urun_miktar - cikis + giris)  
@@ -336,6 +345,16 @@ else:
                     if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
                     st.success("Güncellendi!")
                     st.rerun()
+                    
+                if sil_tik:
+                    if st.session_state['rol'] == 'admin':
+                        satir = df[df['ID'] == secili_id].index[0] + 2
+                        ws_malzemeler.delete_rows(satir)
+                        log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün depodan tamamen kaldırıldı")
+                        st.success(f"🗑️ {urun['Ürün Adı']} depodan silindi!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Ürün silme yetkisi yalnızca Yöneticilere aittir!")
 
     with sekme6:
         st.subheader("⚡ Hızlı İşlem")
@@ -442,22 +461,23 @@ else:
                 df_piyasa = df[df['Alım Türü'] == 'Piyasa Alımı'].copy()
                 
                 if not df_piyasa.empty:
-                    sozlesme_ozet = df_piyasa[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Kritik Stok', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']]
+                    sozlesme_ozet = df_piyasa[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Sözleşme Kritik', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']]
                     st.dataframe(sozlesme_ozet, use_container_width=True, hide_index=True)
                     
-                    st.markdown("### ⏰ Sözleşme ve Stok Uyarıları")
+                    st.markdown("### ⏰ Sözleşme ve Yıllık Stok Uyarıları")
                     for _, row in df_piyasa.iterrows():
                         bitis_str = str(row.get('Sözleşme Bitiş Tarihi', '')).strip()
                         
                         miktar_metni = str(row.get('Miktar', '0')).strip()
-                        kritik_metni = str(row.get('Kritik Stok', '10')).strip()
-                        miktar_val = float(miktar_metni) if miktar_metni and miktar_metni.lower() != "nan" else 0.0
-                        kritik_val = float(kritik_metni) if kritik_metni and kritik_metni.lower() != "nan" else 10.0
+                        s_kritik_metni = str(row.get('Sözleşme Kritik', '20')).strip()
                         
-                        uyari_metni = f"**Sözleşme No:** {row.get('Sözleşme No', '-')} | **Ürün:** {row.get('Ürün Adı', '-')} (Mevcut: {int(miktar_val)} {row.get('Birim', '')})"
+                        miktar_val = float(miktar_metni) if miktar_metni and miktar_metni.lower() != "nan" else 0.0
+                        s_kritik_val = float(s_kritik_metni) if s_kritik_metni and s_kritik_metni.lower() != "nan" else 20.0
+                        
+                        uyari_metni = f"**Sözleşme No:** {row.get('Sözleşme No', '-')} | **Ürün:** {row.get('Ürün Adı', '-')} (Kalan Toplam: {int(miktar_val)} {row.get('Birim', '')})"
 
-                        if miktar_val <= kritik_val:
-                            st.error(f"📉 STOK ALARMI! {uyari_metni} - Kritik sınır ({int(kritik_val)}) altına düştü!")
+                        if miktar_val <= s_kritik_val:
+                            st.error(f"📉 SÖZLEŞME STOK ALARMI! {uyari_metni} - Belirlediğiniz yıllık kritik sınırın ({int(s_kritik_val)}) altına düştü!")
 
                         if bitis_str and bitis_str != "-":
                             try:
@@ -465,13 +485,13 @@ else:
                                 kalan_gun = (bitis_tarihi - bugun).days
                                 
                                 if kalan_gun < 0:
-                                    st.error(f"❌ SÜRESİ DOLDU! {uyari_metni} - Bitiş: {bitis_str}")
+                                    st.error(f"❌ SÖZLEŞME SÜRESİ DOLDU! {uyari_metni} - Bitiş: {bitis_str}")
                                 elif 0 <= kalan_gun <= 30:
-                                    st.warning(f"⚠️ DİKKAT! {uyari_metni} - Sözleşmenin bitmesine **{kalan_gun} gün** kaldı.")
+                                    st.warning(f"⚠️ SÖZLEŞME UYARISI! {uyari_metni} - Bitişine **{kalan_gun} gün** kaldı.")
                             except: pass
                 else:
                     st.info("Şu an sistemde kayıtlı bir 'Piyasa Alımı' sözleşmesi bulunmamaktadır.")
             else:
-                st.info("Sözleşme sistemi henüz aktif edilmedi. Yeni bir piyasa alımı ürünü eklendiğinde liste aktif olacaktır.")
+                st.info("Sözleşme sistemi henüz aktif edilmedi.")
         else:
             st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
