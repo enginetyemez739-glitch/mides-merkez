@@ -12,6 +12,7 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
+import base64
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
@@ -105,7 +106,6 @@ if st.session_state['sifre_degistirme_modu']:
             satir_no = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].index[0] + 2
             bugun = datetime.today().strftime('%Y-%m-%d')
             
-            # Şifreyi şifreleyerek (hash) tabloya yazma
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre_hash)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
@@ -135,7 +135,6 @@ if not st.session_state['giris_yapildi']:
             kadi_input = st.text_input("Kullanıcı Adı")
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
-                # Melez şifre kontrolü: Hem düz metni hem de hashlenmiş versiyonu kabul et
                 girilen_hash = sifre_hashle(sifre_input)
                 kullanici = df_kullanicilar[
                     (df_kullanicilar['Kullanıcı Adı'] == kadi_input) & 
@@ -300,90 +299,3 @@ else:
                     cikis = st.number_input("➖ Çıkış:", min_value=0, max_value=urun_miktar, step=1)
                     giris = st.number_input("➕ Giriş:", min_value=0, step=1)
                 with c_g2:
-                    try: skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
-                    except: skt_val = bugun
-                    y_skt = st.date_input("SKT:", value=skt_val)
-                    y_kritik = st.number_input("Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
-                
-                if st.form_submit_button("💾 Kaydet", type="primary"):
-                    satir = df[df['ID'] == secili_id].index[0] + 2
-                    ws_malzemeler.update_cell(satir, 2, yeni_stok) 
-                    ws_malzemeler.update_cell(satir, 4, urun_miktar - cikis + giris)  
-                    ws_malzemeler.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
-                    ws_malzemeler.update_cell(satir, 11, y_kritik) 
-                    
-                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
-                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
-                    st.success("Güncellendi!")
-                    st.rerun()
-
-    with sekme6:
-        st.subheader("⚡ Hızlı İşlem")
-        aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
-        resim = st.camera_input("📷 Veya QR Okut")
-        bulunan = str(aranan_stok).strip() if aranan_stok else None
-        
-        if resim:
-            cv_img = cv2.cvtColor(np.array(Image.open(resim)), cv2.COLOR_RGB2BGR)
-            data, _, _ = cv2.QRCodeDetector().detectAndDecode(cv_img)
-            if data:
-                try: bulunan = next((s.split("Stok No:")[1].strip() for s in data.split('\n') if "Stok No:" in s), None)
-                except: pass
-                
-        if bulunan:
-            eslesen = df[df['Stok No'].astype(str).str.strip() == bulunan]
-            if not eslesen.empty:
-                st.info(f"📦 Bulunan Ürün: {eslesen.iloc[0]['Ürün Adı']} (Mevcut: {eslesen.iloc[0]['Miktar']})")
-                with st.form("hizli"):
-                    m_dus = st.number_input("➖ Çıkar:", min_value=0, step=1)
-                    m_ekle = st.number_input("➕ Ekle:", min_value=0, step=1)
-                    if st.form_submit_button("💾 Güncelle", type="primary"):
-                        if m_dus > 0 or m_ekle > 0:
-                            ws_malzemeler.update_cell(eslesen.index[0] + 2, 4, int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle)
-                            if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
-                            if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
-                            st.success("Stok güncellendi!")
-                            st.rerun()
-            else: st.error("❌ Ürün bulunamadı.")
-
-    with sekme4:
-        st.subheader("🪪 Ürün Tanıtım Kartı")
-        if not df.empty:
-            secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
-            ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
-            st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
-
-    with sekme5:
-        st.subheader("📝 Detaylı Hareket Geçmişi ve Raporlama")
-        df_gecmis = hareketleri_getir()
-        
-        if not df_gecmis.empty:
-            c_f1, c_f2, c_f3 = st.columns(3)
-            with c_f1:
-                kullanici_listesi = ["Tümü"] + list(df_gecmis['Kullanıcı'].astype(str).unique())
-                secili_kullanici = st.selectbox("👤 Kullanıcı Filtresi", kullanici_listesi)
-            with c_f2:
-                islem_listesi = ["Tümü"] + list(df_gecmis['İşlem'].astype(str).unique())
-                secili_islem = st.selectbox("🔄 İşlem Türü", islem_listesi)
-            with c_f3:
-                ara_urun = st.text_input("🔍 Ürün Adı Ara:")
-                
-            df_filtrelenmis = df_gecmis.copy()
-            if secili_kullanici != "Tümü":
-                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Kullanıcı'].astype(str) == secili_kullanici]
-            if secili_islem != "Tümü":
-                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['İşlem'].astype(str) == secili_islem]
-            if ara_urun:
-                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Ürün Adı'].astype(str).str.contains(ara_urun, case=False, na=False)]
-                
-            st.dataframe(df_filtrelenmis, use_container_width=True, hide_index=True)
-            
-            csv = df_filtrelenmis.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Raporu İndir (Excel/CSV)",
-                data=csv,
-                file_name=f"MIDES_Hareket_Raporu_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime='text/csv'
-            )
-        else:
-            st.info("Henüz geçmiş bir işlem bulunmamaktadır.")
