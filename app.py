@@ -298,4 +298,23 @@ else:
                     yeni_stok = st.text_input("Stok No:", value=str(urun.get('Stok No', '')))
                     cikis = st.number_input("➖ Çıkış:", min_value=0, max_value=urun_miktar, step=1)
                     giris = st.number_input("➕ Giriş:", min_value=0, step=1)
+                
                 with c_g2:
+                    try: 
+                        skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
+                    except: 
+                        skt_val = bugun
+                    y_skt = st.date_input("SKT:", value=skt_val)
+                    y_kritik = st.number_input("Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
+                
+                if st.form_submit_button("💾 Kaydet", type="primary"):
+                    satir = df[df['ID'] == secili_id].index[0] + 2
+                    ws_malzemeler.update_cell(satir, 2, yeni_stok) 
+                    ws_malzemeler.update_cell(satir, 4, urun_miktar - cikis + giris)  
+                    ws_malzemeler.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
+                    ws_malzemeler.update_cell(satir, 11, y_kritik) 
+                    
+                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
+                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
+                    st.success("Güncellendi!")
+                    st.rerun()
