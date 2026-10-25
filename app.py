@@ -43,7 +43,6 @@ except:
 try:
     ws_malzemeler = sheet.worksheet("Malzemeler")
     headers = ws_malzemeler.row_values(1)
-    # Eksik sözleşme sütunlarını tamamla
     if "Alım Türü" not in headers:
         ws_malzemeler.update_cell(1, 12, "Alım Türü")
         ws_malzemeler.update_cell(1, 13, "Sözleşme No")
@@ -61,6 +60,12 @@ except:
     ws_hareket = sheet.add_worksheet(title="Hareket_Gecmisi", rows="1000", cols="10")
     ws_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
 
+try:
+    ws_geri_bildirim = sheet.worksheet("Geri_Bildirimler")
+except:
+    ws_geri_bildirim = sheet.add_worksheet(title="Geri_Bildirimler", rows="1000", cols="10")
+    ws_geri_bildirim.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
+
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     mevcut_id = len(ws_hareket.get_all_values())
@@ -76,6 +81,12 @@ def hareketleri_getir():
     kayitlar = ws_hareket.get_all_records()
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
+    return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
+
+def geri_bildirimleri_getir():
+    kayitlar = ws_geri_bildirim.get_all_records()
+    if not kayitlar:
+        return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
     return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
 
 def qr_olustur(metin):
@@ -128,7 +139,7 @@ if st.session_state['sifre_degistirme_modu']:
             st.session_state['ilk_giris_uyarisi'] = False
             st.stop()
         else:
-            st.error("Şifler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+            st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
     st.stop()
 
 if not st.session_state['giris_yapildi']:
@@ -198,7 +209,7 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş", "📑 Sözleşmeler"])
+    sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş", "📑 Sözleşmeler", "💬 Geri Bildirim"])
 
     with sekme1:
         st.markdown("### 📋 Depo Uyarıları")
@@ -495,3 +506,30 @@ else:
                 st.info("Sözleşme sistemi henüz aktif edilmedi.")
         else:
             st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
+
+    with sekme8:
+        st.subheader("💬 Geri Bildirim ve Talep Formu")
+        st.markdown("Sistemle ilgili karşılaştığınız hataları, eksiklikleri veya eklenmesini istediğiniz yeni özellikleri buradan bildirebilirsiniz.")
+        
+        with st.form("geri_bildirim_formu"):
+            tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Yeni Özellik İsteği", "Öneri / Görüş"])
+            mesaj = st.text_area("Mesajınız / Talebiniz:")
+            gonder_btn = st.form_submit_button("Geri Bildirimi Gönder", use_container_width=True)
+            
+            if gonder_btn:
+                if mesaj.strip():
+                    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    mevcut_id = len(ws_geri_bildirim.get_all_values())
+                    ws_geri_bildirim.append_row([mevcut_id, zaman, st.session_state['kullanici'], tur, mesaj])
+                    st.success("✅ Geri bildiriminiz başarıyla iletildi. Teşekkür ederiz!")
+                else:
+                    st.error("Lütfen mesaj alanını boş bırakmayın.")
+                    
+        if st.session_state['rol'] == 'admin':
+            st.divider()
+            st.subheader("📥 Gelen Geri Bildirimler (Yönetici Paneli)")
+            df_gb = geri_bildirimleri_getir()
+            if not df_gb.empty:
+                st.dataframe(df_gb, use_container_width=True, hide_index=True)
+            else:
+                st.info("Henüz gönderilmiş bir geri bildirim bulunmuyor.")
