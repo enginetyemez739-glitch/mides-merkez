@@ -19,10 +19,19 @@ except:
     st.stop()
 
 def telegram_mesaj_gonder(mesaj):
-    try:
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", data={"chat_id": TELEGRAM_CHAT_ID, "text": mesaj})
-    except:
-        pass
+    # Sisteme giriş yapmış personelin kendi Token ve Chat ID bilgilerini kullanır
+    if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
+        token = st.session_state['telegram_token']
+        chat_id = st.session_state['telegram_chat_id']
+        
+        # Token ve ID boş değilse mesajı gönderir
+        if token and chat_id and str(token).lower() != "nan" and str(chat_id).lower() != "nan":
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {"chat_id": chat_id, "text": mesaj}
+            try:
+                requests.post(url, data=payload)
+            except:
+                pass
 
 scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 client = gspread.authorize(Credentials.from_service_account_info(json.loads(google_json_str), scopes=scope))
