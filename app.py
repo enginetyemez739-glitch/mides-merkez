@@ -40,9 +40,39 @@ if not st.session_state['giris_yapildi']:
             if st.form_submit_button("Sisteme Giriş Yap", use_container_width=True):
                 df_kul = pd.DataFrame(client.open("MİDES - Merkez Kontrol").get_worksheet(0).get_all_records())
                 kullanici = df_kul[(df_kul['Kullanıcı Adı'] == kadi) & (df_kul['Şifre'] == str(sifre))]
-                if not kullanici.empty and str(kullanici['Lisans Durumu'].values[0]).strip().lower() == "aktif":
-                    st.session_state.update({'giris_yapildi': True, 'kullanici': kadi, 'birlik': kullanici['Birlik Adı'].values[0], 'yetki': kullanici['Yetki Türü'].values[0]})
-                    st.rerun()
+                if not kullanici.empty:
+            yetki = kullanici['Yetki'].values[0]
+            
+            if yetki == "Gida" or yetki == "Yonetici":
+                st.session_state['kullanici'] = kadi_input
+                st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
+                
+                # Yeni sütunları (Telegram ve İlk Giriş) sisteme alma
+                ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower()
+                st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
+                st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0])
+                
+                # İlk giriş kontrolü ve 90 günlük şifre döngüsü
+                if ilk_giris == "evet":
+                    st.session_state['sifre_degistirme_modu'] = True
+                    st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
+                else:
+                    son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
+                    gecen_gun = (datetime.today() - son_guncelleme).days
+                    kalan_gun = 90 - gecen_gun
+                    
+                    if gecen_gun >= 90:
+                        st.session_state['sifre_degistirme_modu'] = True
+                    else:
+                        st.session_state['sifre_degistirme_modu'] = False
+                        st.session_state['giris_yapildi'] = True
+                        
+                        if kalan_gun <= 5:
+                            st.warning(f"⚠️ Dikkat: Şifrenizin geçerlilik süresinin dolmasına {kalan_gun} gün kalmıştır.")
+                        
+                        st.rerun()
+            else:
+                st.error("❌ Bu depoya giriş yetkiniz bulunmamaktadır!")
                 else:
                     st.error("Hatalı giriş veya lisans süresi dolmuş!")
 else:
