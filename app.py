@@ -341,4 +341,4 @@ else:
 
     with sekme5:
         st.subheader("📝 Hareket Geçmişi")
-        st.dataframe(hareketleri_getir(),
+        st.dataframe(hareketleri_getir(), use.
