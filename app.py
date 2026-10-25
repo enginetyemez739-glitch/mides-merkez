@@ -1,115 +1,188 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import os
+import qrcode
+from io import BytesIO
+from PIL import Image
+import requests
+import cv2
+import numpy as np
 import json
 import gspread
 from google.oauth2.service_account import Credentials
-import requests
-import qrcode
-from io import BytesIO
 
-st.set_page_config(page_title="MİDES", page_icon="📦", layout="wide")
+st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
+# --- GİZLİ KASA AYARLARI ---
 try:
     google_json_str = st.secrets["google_json"]
-    TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
-    TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 except:
-    st.error("Gizli kasa ayarları eksik!")
+    st.error("Gizli kasa (Secrets) ayarları bulunamadı!")
     st.stop()
 
+# --- GOOGLE SHEETS BAĞLANTISI ---
+scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+creds_dict = json.loads(google_json_str)
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+client = gspread.authorize(creds)
+
+try:
+    sheet = client.open('MİDES - Gıda Deposu')
+    kullanici_tablosu = client.open("MİDES - Kullanıcılar").get_worksheet(0)
+    df_kullanicilar = pd.DataFrame(kullanici_tablosu.get_all_records())
+except:
+    st.error("Google Drive'da gerekli tablolar bulunamadı. 'MİDES - Kullanıcılar' ve 'MİDES - Gıda Deposu' tablolarını kontrol edin.")
+    st.stop()
+
+try:
+    ws_malzemeler = sheet.worksheet("Malzemeler")
+except:
+    ws_malzemeler = sheet.add_worksheet(title="Malzemeler", rows="1000", cols="20")
+    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok"])
+
+try:
+    ws_hareket = sheet.worksheet("Hareket_Gecmisi")
+except:
+    ws_hareket = sheet.add_worksheet(title="Hareket_Gecmisi", rows="1000", cols="10")
+    ws_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
+
+def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
+    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    mevcut_id = len(ws_hareket.get_all_values())
+    ws_hareket.append_row([mevcut_id, zaman, kullanici, islem_tipi, urun_adi, miktar, aciklama])
+
+def verileri_getir():
+    kayitlar = ws_malzemeler.get_all_records()
+    if not kayitlar:
+        return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok"])
+    return pd.DataFrame(kayitlar)
+
+def hareketleri_getir():
+    kayitlar = ws_hareket.get_all_records()
+    if not kayitlar:
+        return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
+    return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
+
+def qr_olustur(metin):
+    qr = qrcode.QRCode(version=1, box_size=6, border=2)
+    qr.add_data(metin)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
 def telegram_mesaj_gonder(mesaj):
-    # Sisteme giriş yapmış personelin kendi Token ve Chat ID bilgilerini kullanır
+    # KİŞİYE ÖZEL TELEGRAM BİLDİRİM FONKSİYONU
     if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
         token = st.session_state['telegram_token']
         chat_id = st.session_state['telegram_chat_id']
-        
-        # Token ve ID boş değilse mesajı gönderir
         if token and chat_id and str(token).lower() != "nan" and str(chat_id).lower() != "nan":
             url = f"https://api.telegram.org/bot{token}/sendMessage"
             payload = {"chat_id": chat_id, "text": mesaj}
-            try:
-                requests.post(url, data=payload)
-            except:
-                pass
+            try: requests.post(url, data=payload)
+            except: pass
 
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-client = gspread.authorize(Credentials.from_service_account_info(json.loads(google_json_str), scopes=scope))
-
+# --- YENİ OTURUM VE ŞİFRE YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
-    st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'birlik': "", 'yetki': ""})
+    st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
+
+if st.session_state['sifre_degistirme_modu']:
+    if st.session_state.get('ilk_giris_uyarisi'):
+        st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
+    else:
+        st.warning("⚠️ Şifrenizin kullanım süresi (90 gün) dolmuş veya değişiklik talep ettiniz. Lütfen yeni şifre belirleyin.")
+        
+    yeni_sifre = st.text_input("Yeni Şifre:", type="password")
+    yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar):", type="password")
+    
+    if st.button("Şifreyi Güncelle"):
+        if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
+            satir_no = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].index[0] + 2
+            bugun = datetime.today().strftime('%Y-%m-%d')
+            
+            # Şifreyi, Tarihi ve "İlk Giriş" Durumunu Güncelleme
+            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre)
+            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
+            
+            if 'İlk Giriş' in df_kullanicilar.columns:
+                kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('İlk Giriş') + 1, 'Hayır')
+            
+            st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek yeni şifrenizle giriş yapın.")
+            st.session_state['sifre_degistirme_modu'] = False
+            st.session_state['giris_yapildi'] = False
+            st.session_state['ilk_giris_uyarisi'] = False
+            st.stop()
+        else:
+            st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+    st.stop()
 
 if not st.session_state['giris_yapildi']:
-    st.markdown("<h1 style='text-align: center;'>🏢 MİDES - Merkezi Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        with st.form("login"):
-            kadi = st.text_input("Kullanıcı Adı")
-            sifre = st.text_input("Şifre", type="password")
-            if st.form_submit_button("Sisteme Giriş Yap", use_container_width=True):
-                df_kul = pd.DataFrame(client.open("MİDES - Merkez Kontrol").get_worksheet(0).get_all_records())
-                kullanici = df_kul[(df_kul['Kullanıcı Adı'] == kadi) & (df_kul['Şifre'] == str(sifre))]
+    st.markdown("<h1 style='text-align: center;'>🔐 Gıda Deposu Yönetim Sistemi</h1>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("login_form"):
+            kadi_input = st.text_input("Kullanıcı Adı")
+            sifre_input = st.text_input("Şifre", type="password")
+            if st.form_submit_button("Giriş Yap", use_container_width=True):
+                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adı'] == kadi_input) & (df_kullanicilar['Şifre'] == str(sifre_input))]
+                
                 if not kullanici.empty:
-            yetki = kullanici['Yetki'].values[0]
-            
-            if yetki == "Gida" or yetki == "Yonetici":
-                st.session_state['kullanici'] = kadi_input
-                st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
-                
-                # Yeni sütunları (Telegram ve İlk Giriş) sisteme alma
-                ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower()
-                st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
-                st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0])
-                
-                # İlk giriş kontrolü ve 90 günlük şifre döngüsü
-                if ilk_giris == "evet":
-                    st.session_state['sifre_degistirme_modu'] = True
-                    st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
-                else:
-                    son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
-                    gecen_gun = (datetime.today() - son_guncelleme).days
-                    kalan_gun = 90 - gecen_gun
-                    
-                    if gecen_gun >= 90:
-                        st.session_state['sifre_degistirme_modu'] = True
+                    yetki = kullanici['Yetki'].values[0]
+                    if yetki == "Gida" or yetki == "Yonetici":
+                        st.session_state['kullanici'] = kadi_input
+                        st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
+                        
+                        # Kullanıcının Telegram bilgilerini okuma
+                        st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0]) if 'Telegram Token' in kullanici else ""
+                        st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0]) if 'Chat ID' in kullanici else ""
+                        
+                        # İLK GİRİŞ KONTROLÜ
+                        ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
+                        if ilk_giris == "evet":
+                            st.session_state['sifre_degistirme_modu'] = True
+                            st.session_state['ilk_giris_uyarisi'] = True
+                            st.rerun()
+                        else:
+                            # 90 GÜN KONTROLÜ
+                            son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
+                            gecen_gun = (datetime.today() - son_guncelleme).days
+                            kalan_gun = 90 - gecen_gun
+                            
+                            if gecen_gun >= 90:
+                                st.session_state['sifre_degistirme_modu'] = True
+                            else:
+                                st.session_state['sifre_degistirme_modu'] = False
+                                st.session_state['giris_yapildi'] = True
+                                
+                                if kalan_gun <= 5:
+                                    st.warning(f"⚠️ Dikkat: Şifrenizin geçerlilik süresinin dolmasına {kalan_gun} gün kalmıştır.")
+                                
+                                st.rerun()
                     else:
-                        st.session_state['sifre_degistirme_modu'] = False
-                        st.session_state['giris_yapildi'] = True
-                        
-                        if kalan_gun <= 5:
-                            st.warning(f"⚠️ Dikkat: Şifrenizin geçerlilik süresinin dolmasına {kalan_gun} gün kalmıştır.")
-                        
-                        st.rerun()
+                        st.error("❌ Bu depoya giriş yetkiniz bulunmamaktadır!")
             else:
-                st.error("❌ Bu depoya giriş yetkiniz bulunmamaktadır!")
-                else:
-                    st.error("Hatalı giriş veya lisans süresi dolmuş!")
+                st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
-    birlik = st.session_state['birlik']
-    yetki = st.session_state['yetki']
-    
-    col_baslik, col_kullanici = st.columns([4, 1])
-    with col_baslik:
-        st.markdown(f"<h1>📦 MİDES - Merkezi İkmal ve Depo Sistemi</h1>", unsafe_allow_html=True)
-        st.caption(f"{birlik} - {yetki} Deposu")
-    with col_kullanici:
-        st.write(f"👤 *{st.session_state['kullanici']}*")
+    df = verileri_getir()
+    bugun = datetime.now().date()
+                        
+    c_ust1, c_ust2 = st.columns([4, 1])
+    with c_ust1: st.title("📦 MİDES - Merkezi İkmal ve Depo Sistemi")
+    with c_ust2:
+        st.write(f"👤 {st.session_state['kullanici']}")
+        if st.button("🔄 Şifre Değiştir"):
+            st.session_state['sifre_degistirme_modu'] = True
+            st.rerun()
         if st.button("🚪 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
-    
-    if yetki in ["Gida", "Temizlik", "Esya", "Kiyafet"]:
-        tablo_adi = f"{birlik} - {yetki} Deposu"
-        aktif_tablo = client.open(tablo_adi).get_worksheet(0)
-        df = pd.DataFrame(aktif_tablo.get_all_records())
-        
-        if 'Kritik Seviye' not in df.columns: df['Kritik Seviye'] = 20
-        df['Miktar'] = pd.to_numeric(df['Miktar'], errors='coerce').fillna(0)
 
-        t_ozet, t_ekle, t_guncelle, t_hizli, t_kart, t_gecmis = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "📇 Ürün Kartı", "📄 Geçmiş"])
+    sekme1, sekme2, sekme3, sekme6, sekme4, sekme5 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş"])
 
-        with t_ozet:
-            st.markdown("### 📋 Depo Uyarıları")
+    with sekme1:
+        st.markdown("### 📋 Depo Uyarıları")
         krt_sayisi = 0
         telegram_raporu = "⚠️ MİDES KRİTİK UYARI RAPORU ⚠️\n\n"
         
@@ -172,61 +245,40 @@ else:
         gosterilecek_df = df.drop(columns=['Resim Yolu', 'Miktar_Sayi'], errors='ignore')
         st.dataframe(gosterilecek_df, use_container_width=True, hide_index=True)
 
-        with t_ekle:
-            with st.form("ekle"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    s_no = st.text_input("Stok No")
-                    u_ad = st.text_input("Ürün Adı")
-                    mik = st.number_input("Miktar", min_value=0)
-                    birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Paket"])
-                with c2:
-                    k_sev = st.number_input("Kritik Seviye", value=20)
-                    u_tar = st.date_input("Üretim Tarihi")
-                    skt = st.date_input("SKT")
-                if st.form_submit_button("Kaydet") and u_ad:
-                    aktif_tablo.append_row([len(df)+1 if not df.empty else 1, s_no, u_ad, mik, birim, bugun.strftime("%Y-%m-%d"), str(skt), str(u_tar), k_sev])
-                    st.rerun()
+    with sekme2:
+        st.subheader("Depoya Yeni Ürün Ekle")
+        with st.form("urun_ekle_formu"):
+            col1, col2 = st.columns(2)
+        
+        with col1:
+            stok_no = st.text_input("Stok Numarası (Barkod)")
+            urun_adi = st.text_input("Ürün Adı")
+            miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
+            birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket"])
+            
+        with col2:
+            kritik_seviye = st.number_input("Kritik Uyarı Seviyesi", min_value=1, value=20)
+            uretim_tarihi = st.date_input("Üretim Tarihi")
+            skt = st.date_input("Son Kullanma Tarihi (SKT)")
+            ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
+        
+        if ekle_btn:
+            if urun_adi and stok_no:
+                bugun = datetime.now().strftime("%Y-%m-%d")
+                yeni_id = 1 if df.empty else int(df['ID'].max()) + 1
+                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun, str(skt), str(uretim_tarihi), bugun, "", kritik_seviye]
+                ws_malzemeler.append_row(yeni_satir)
+                st.success(f"✅ {urun_adi} depoya başarıyla kaydedildi! Sayfa yenileniyor...")
+                st.rerun()
+            else:
+                st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
 
-        with t_guncelle:
-            if not df.empty:
-                with st.form("guncelle"):
-                    secilen = st.selectbox("Ürün Seçin", df['Ürün Adı'].tolist())
-                    islem = st.radio("İşlem", ["Stok Ekle", "Stok Düş"], horizontal=True)
-                    deger = st.number_input("Miktar", min_value=1)
-                    if st.form_submit_button("Güncelle"):
-                        idx = df[df['Ürün Adı'] == secilen].index[0]
-                        yeni = df.loc[idx, 'Miktar'] + deger if islem == "Stok Ekle" else df.loc[idx, 'Miktar'] - deger
-                        if yeni >= 0:
-                            aktif_tablo.update_cell(int(idx)+2, 4, yeni)
-                            st.rerun()
-
-        with t_hizli:
-            st.info("Barkod okuyucu ile hızlı işlem menüsü.")
-            with st.form("qr_islem"):
-                qr_no = st.text_input("Barkod / Stok No")
-                islem_t = st.radio("Tipi", ["Giriş", "Çıkış"], horizontal=True)
-                val = st.number_input("Miktar", min_value=1)
-                if st.form_submit_button("Uygula") and qr_no:
-                    eslesme = df[df['Stok No'].astype(str) == str(qr_no)]
-                    if not eslesme.empty:
-                        idx = eslesme.index[0]
-                        yeni = df.loc[idx, 'Miktar'] + val if islem_t == "Giriş" else df.loc[idx, 'Miktar'] - val
-                        if yeni >= 0:
-                            aktif_tablo.update_cell(int(idx)+2, 4, yeni)
-                            st.rerun()
-
-        with t_kart:
-            if not df.empty:
-                qr_urun = st.selectbox("QR Üretilecek Ürün", df['Ürün Adı'].tolist())
-                if st.button("QR Oluştur"):
-                    stok_kodu = str(df[df['Ürün Adı'] == qr_urun].iloc[0]['Stok No'])
-                    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-                    qr.add_data(stok_kodu)
-                    qr.make(fit=True)
-                    buf = BytesIO()
-                    qr.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
-                    st.image(buf.getvalue(), width=250)
-
-        with t_gecmis:
-            st.info("Geçmiş işlem kayıtları yakında eklenecektir.")
+    with sekme3:
+        st.subheader("🔄 Ürün Bilgilerini Güncelle")
+        if not df.empty:
+            secili_guncelleme = st.selectbox("Ürünü seçin:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+            secili_id = int(secili_guncelleme.split(" - ")[0])
+            urun = df[df['ID'] == secili_id].iloc[0]
+            urun_miktar = int(float(str(urun.get('Miktar', '0')).strip() or '0'))
+            
+            with st.
