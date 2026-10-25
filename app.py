@@ -74,7 +74,6 @@ def qr_olustur(metin):
     return buf.getvalue()
 
 def telegram_mesaj_gonder(mesaj):
-    # KİŞİYE ÖZEL TELEGRAM BİLDİRİM FONKSİYONU
     if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
         token = st.session_state['telegram_token']
         chat_id = st.session_state['telegram_chat_id']
@@ -102,7 +101,6 @@ if st.session_state['sifre_degistirme_modu']:
             satir_no = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].index[0] + 2
             bugun = datetime.today().strftime('%Y-%m-%d')
             
-            # Şifreyi, Tarihi ve "İlk Giriş" Durumunu Güncelleme
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
             
@@ -121,10 +119,9 @@ if st.session_state['sifre_degistirme_modu']:
 if not st.session_state['giris_yapildi']:
     c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
     with c_img2:
-        try:
-            st.image("amblem.png", use_container_width=True)
-        except:
-            pass
+        try: st.image("amblem.png", use_container_width=True)
+        except: pass
+        
     st.markdown("<h1 style='text-align: center;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -140,18 +137,15 @@ if not st.session_state['giris_yapildi']:
                         st.session_state['kullanici'] = kadi_input
                         st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
                         
-                        # Kullanıcının Telegram bilgilerini okuma
                         st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0]) if 'Telegram Token' in kullanici else ""
                         st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0]) if 'Chat ID' in kullanici else ""
                         
-                        # İLK GİRİŞ KONTROLÜ
                         ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
                         if ilk_giris == "evet":
                             st.session_state['sifre_degistirme_modu'] = True
                             st.session_state['ilk_giris_uyarisi'] = True
                             st.rerun()
                         else:
-                            # 90 GÜN KONTROLÜ
                             son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
                             gecen_gun = (datetime.today() - son_guncelleme).days
                             kalan_gun = 90 - gecen_gun
@@ -270,10 +264,11 @@ else:
         
         if ekle_btn:
             if urun_adi and stok_no:
-                bugun = datetime.now().strftime("%Y-%m-%d")
+                bugun_tarih = datetime.now().strftime("%Y-%m-%d")
                 yeni_id = 1 if df.empty else int(df['ID'].max()) + 1
-                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun, str(skt), str(uretim_tarihi), bugun, "", kritik_seviye]
+                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye]
                 ws_malzemeler.append_row(yeni_satir)
+                log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, "Sisteme ilk kez eklendi")
                 st.success(f"✅ {urun_adi} depoya başarıyla kaydedildi! Sayfa yenileniyor...")
                 st.rerun()
             else:
@@ -306,8 +301,8 @@ else:
                     ws_malzemeler.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
                     ws_malzemeler.update_cell(satir, 11, y_kritik) 
                     
-                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "")
-                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "")
+                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
+                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
                     st.success("Güncellendi!")
                     st.rerun()
 
@@ -334,6 +329,8 @@ else:
                     if st.form_submit_button("💾 Güncelle", type="primary"):
                         if m_dus > 0 or m_ekle > 0:
                             ws_malzemeler.update_cell(eslesen.index[0] + 2, 4, int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle)
+                            if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
+                            if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
                             st.success("Stok güncellendi!")
                             st.rerun()
             else: st.error("❌ Ürün bulunamadı.")
@@ -346,5 +343,36 @@ else:
             st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
 
     with sekme5:
-        st.subheader("📝 Hareket Geçmişi")
-        st.dataframe(hareketleri_getir(), use_container_width=True)
+        st.subheader("📝 Detaylı Hareket Geçmişi ve Raporlama")
+        df_gecmis = hareketleri_getir()
+        
+        if not df_gecmis.empty:
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1:
+                kullanici_listesi = ["Tümü"] + list(df_gecmis['Kullanıcı'].astype(str).unique())
+                secili_kullanici = st.selectbox("👤 Kullanıcı Filtresi", kullanici_listesi)
+            with c_f2:
+                islem_listesi = ["Tümü"] + list(df_gecmis['İşlem'].astype(str).unique())
+                secili_islem = st.selectbox("🔄 İşlem Türü", islem_listesi)
+            with c_f3:
+                ara_urun = st.text_input("🔍 Ürün Adı Ara:")
+                
+            df_filtrelenmis = df_gecmis.copy()
+            if secili_kullanici != "Tümü":
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Kullanıcı'].astype(str) == secili_kullanici]
+            if secili_islem != "Tümü":
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['İşlem'].astype(str) == secili_islem]
+            if ara_urun:
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Ürün Adı'].astype(str).str.contains(ara_urun, case=False, na=False)]
+                
+            st.dataframe(df_filtrelenmis, use_container_width=True, hide_index=True)
+            
+            csv = df_filtrelenmis.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Raporu İndir (Excel/CSV)",
+                data=csv,
+                file_name=f"MIDES_Hareket_Raporu_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime='text/csv'
+            )
+        else:
+            st.info("Henüz geçmiş bir işlem bulunmamaktadır.")
