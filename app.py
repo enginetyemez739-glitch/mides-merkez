@@ -298,12 +298,9 @@ else:
                     yeni_stok = st.text_input("Stok No:", value=str(urun.get('Stok No', '')))
                     cikis = st.number_input("➖ Çıkış:", min_value=0, max_value=urun_miktar, step=1)
                     giris = st.number_input("➕ Giriş:", min_value=0, step=1)
-                
                 with c_g2:
-                    try: 
-                        skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
-                    except: 
-                        skt_val = bugun
+                    try: skt_val = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
+                    except: skt_val = bugun
                     y_skt = st.date_input("SKT:", value=skt_val)
                     y_kritik = st.number_input("Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
                 
@@ -318,3 +315,100 @@ else:
                     if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
                     st.success("Güncellendi!")
                     st.rerun()
+
+    with sekme6:
+        st.subheader("⚡ Hızlı İşlem")
+        aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
+        resim = st.camera_input("📷 Veya QR Okut")
+        bulunan = str(aranan_stok).strip() if aranan_stok else None
+        
+        if resim:
+            cv_img = cv2.cvtColor(np.array(Image.open(resim)), cv2.COLOR_RGB2BGR)
+            data, _, _ = cv2.QRCodeDetector().detectAndDecode(cv_img)
+            if data:
+                try: bulunan = next((s.split("Stok No:")[1].strip() for s in data.split('\n') if "Stok No:" in s), None)
+                except: pass
+                
+        if bulunan:
+            eslesen = df[df['Stok No'].astype(str).str.strip() == bulunan]
+            if not eslesen.empty:
+                st.info(f"📦 Bulunan Ürün: {eslesen.iloc[0]['Ürün Adı']} (Mevcut: {eslesen.iloc[0]['Miktar']})")
+                with st.form("hizli"):
+                    m_dus = st.number_input("➖ Çıkar:", min_value=0, step=1)
+                    m_ekle = st.number_input("➕ Ekle:", min_value=0, step=1)
+                    if st.form_submit_button("💾 Güncelle", type="primary"):
+                        if m_dus > 0 or m_ekle > 0:
+                            ws_malzemeler.update_cell(eslesen.index[0] + 2, 4, int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle)
+                            if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
+                            if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
+                            st.success("Stok güncellendi!")
+                            st.rerun()
+            else: st.error("❌ Ürün bulunamadı.")
+
+    with sekme4:
+        st.subheader("🪪 Ürün Tanıtım Kartı ve Toplu Çıktı")
+        if not df.empty:
+            c_kart1, c_kart2 = st.columns(2)
+            with c_kart1:
+                st.markdown("**Tekli QR Kod**")
+                secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+                ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
+                st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
+            
+            with c_kart2:
+                st.markdown("**Toplu QR Kod Çıktısı (A4)**")
+                st.info("Tüm ürün barkodlarını A4 formatında yazdırabileceğiniz belgeyi indirin. Dosyayı açıp 'Yazdır' (Ctrl+P) yaparak raflara yapıştırabilirsiniz.")
+                
+                html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo QR Barkod Listesi</h2><div class='grid'>"
+                for _, row in df.iterrows():
+                    u_adi = str(row.get('Ürün Adı', ''))
+                    s_no = str(row.get('Stok No', ''))
+                    q_data = qr_olustur(f"Ürün: {u_adi}\nStok No: {s_no}")
+                    b64_qr = base64.b64encode(q_data).decode()
+                    html_icerik += f"<div class='card'><div class='title'>{u_adi}</div><div class='stok'>Stok No: {s_no}</div><img src='data:image/png;base64,{b64_qr}'></div>"
+                html_icerik += "</div></body></html>"
+                
+                st.download_button(
+                    label="📄 Yazdırılabilir Belgeyi İndir",
+                    data=html_icerik,
+                    file_name="MIDES_Toplu_Barkodlar.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+        else:
+            st.info("Depoda henüz ürün bulunmuyor.")
+
+    with sekme5:
+        st.subheader("📝 Detaylı Hareket Geçmişi ve Raporlama")
+        df_gecmis = hareketleri_getir()
+        
+        if not df_gecmis.empty:
+            c_f1, c_f2, c_f3 = st.columns(3)
+            with c_f1:
+                kullanici_listesi = ["Tümü"] + list(df_gecmis['Kullanıcı'].astype(str).unique())
+                secili_kullanici = st.selectbox("👤 Kullanıcı Filtresi", kullanici_listesi)
+            with c_f2:
+                islem_listesi = ["Tümü"] + list(df_gecmis['İşlem'].astype(str).unique())
+                secili_islem = st.selectbox("🔄 İşlem Türü", islem_listesi)
+            with c_f3:
+                ara_urun = st.text_input("🔍 Ürün Adı Ara:")
+                
+            df_filtrelenmis = df_gecmis.copy()
+            if secili_kullanici != "Tümü":
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Kullanıcı'].astype(str) == secili_kullanici]
+            if secili_islem != "Tümü":
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['İşlem'].astype(str) == secili_islem]
+            if ara_urun:
+                df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Ürün Adı'].astype(str).str.contains(ara_urun, case=False, na=False)]
+                
+            st.dataframe(df_filtrelenmis, use_container_width=True, hide_index=True)
+            
+            csv = df_filtrelenmis.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Raporu İndir (Excel/CSV)",
+                data=csv,
+                file_name=f"MIDES_Hareket_Raporu_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime='text/csv'
+            )
+        else:
+            st.info("Henüz geçmiş bir işlem bulunmamaktadır.")
