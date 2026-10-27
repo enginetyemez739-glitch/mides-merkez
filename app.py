@@ -103,8 +103,6 @@ def telegram_mesaj_gonder(mesaj):
 
 # --- OTURUM YÖNETİMİ ---
 df_kullanicilar = pd.DataFrame(supabase_get("Kullanıcılar"))
-if not df_kullanicilar.empty:
-    df_kullanicilar.columns = [str(c).strip() for c in df_kullanicilar.columns]
 
 if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
@@ -122,15 +120,8 @@ if st.session_state['sifre_degistirme_modu']:
         if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
-            
-            # Sütun adını dinamik bul
-            kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() and 'ad' in c.lower()), 'Kullanıcı Adı')
-            sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
-            ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
-            gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
-            
-            guncelleme_data = {sifre_col: yeni_sifre_hash, gun_col: bugun, ilk_col: "Hayır"}
-            supabase_update("Kullanıcılar", st.session_state['kullanici'], kadi_col, guncelleme_data)
+            guncelleme_data = {"Sifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adi", guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
@@ -152,36 +143,27 @@ if not st.session_state.get('giris_yapildi', False):
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                # Sütun adlarını dinamik ve hatasız tespit etme
-                kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() and 'ad' in c.lower()), 'Kullanıcı Adı')
-                sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
-                yetki_col = next((c for c in df_kullanicilar.columns if 'yetki' in c.lower()), 'Yetki')
-                ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
-                gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
-                t_token_col = next((c for c in df_kullanicilar.columns if 'token' in c.lower()), 'Telegram Token')
-                t_chat_col = next((c for c in df_kullanicilar.columns if 'chat' in c.lower() or 'id' in c.lower()), 'Telegram Chat ID')
-
-                kullanici = df_kullanicilar[(df_kullanicilar[kadi_col].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar[sifre_col].astype(str).str.strip() == str(girilen_hash).strip())]
+                # Sabit ve doğrudan Supabase sütun adlarıyla eşleştirme
+                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar['Sifre'].astype(str).str.strip() == str(girilen_hash).strip())]
                 
                 if not kullanici.empty:
-                    yetki = kullanici[yetki_col].values[0]
-                    ilk_giris = str(kullanici[ilk_col].values[0]).strip().lower() if ilk_col in kullanici.columns else "hayır"
+                    yetki = kullanici['Yetki'].values[0]
+                    ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici.columns else "hayır"
                     
                     st.session_state['kullanici'] = kadi_input
                     st.session_state['rol'] = str(yetki).strip().lower()
                     
-                    # Supabase'den Telegram bilgileri çekilir
-                    if t_token_col in kullanici.columns and not pd.isna(kullanici[t_token_col].values[0]):
-                        st.session_state['telegram_token'] = str(kullanici[t_token_col].values[0])
-                    if t_chat_col in kullanici.columns and not pd.isna(kullanici[t_chat_col].values[0]):
-                        st.session_state['telegram_chat_id'] = str(kullanici[t_chat_col].values[0])
+                    if 'Telegram Token' in kullanici.columns and not pd.isna(kullanici['Telegram Token'].values[0]):
+                        st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
+                    if 'Telegram Chat ID' in kullanici.columns and not pd.isna(kullanici['Telegram Chat ID'].values[0]):
+                        st.session_state['telegram_chat_id'] = str(kullanici['Telegram Chat ID'].values[0])
 
                     if ilk_giris == "evet":
                         st.session_state['sifre_degistirme_modu'] = True
                         st.session_state['ilk_giris_uyarisi'] = True
                         st.rerun()
                     else:
-                        son_gun_val = kullanici[gun_col].values[0] if gun_col in kullanici.columns else None
+                        son_gun_val = kullanici['Son Güncelleme'].values[0] if 'Son Güncelleme' in kullanici.columns else None
                         if pd.isna(son_gun_val):
                             st.session_state['giris_yapildi'] = True
                             st.rerun()
@@ -254,7 +236,7 @@ else:
 
         if krt_sayisi == 0:
             st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
-            telegram_raporu += "✅ Kritik ürün bulunamadı. Depo güvende!"
+            telegram_raporu += "✅ Kritik ürün bulunmamaktadır. Depo güvende!"
 
         if st.button("📲 Telegram'a Rapor Gönder", type="primary"):
             telegram_mesaj_gonder(telegram_raporu)
@@ -529,7 +511,7 @@ else:
             else:
                 st.info("Sözleşme sistemi henüz aktif edilmedi.")
         else:
-            st.error("🔒- Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
+            st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
 
     with sekme8:
         st.subheader("💬 Geri Bildirim ve Talep Formu")
