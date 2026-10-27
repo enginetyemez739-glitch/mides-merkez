@@ -105,7 +105,15 @@ def telegram_mesaj_gonder(mesaj):
 df_kullanicilar = pd.DataFrame(supabase_get("Kullanıcılar"))
 
 if 'giris_yapildi' not in st.session_state:
-    st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
+    st.session_state.update({
+        'giris_yapildi': False, 
+        'kullanici': "", 
+        'rol': "", 
+        'sifre_degistirme_modu': False, 
+        'ilk_giris_uyarisi': False,
+        'telegram_token': "",
+        'telegram_chat_id': ""
+    })
 
 if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'):
@@ -120,17 +128,18 @@ if st.session_state['sifre_degistirme_modu']:
         if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
-            guncelleme_data = {"Şifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
-            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adı", guncelleme_data)
+            guncelleme_data = {"Sifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adi", guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
             st.session_state['giris_yapildi'] = False
             st.session_state['ilk_giris_uyarisi'] = False
-            st.stop()
+            st.rerun()
         else:
             st.error("Şifreler uyuşmuyor veya çok kısa.")
     st.stop()
+
 if not st.session_state.get('giris_yapildi', False):
     st.markdown("<h1 style='text-align: center;'> 📦 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -139,42 +148,45 @@ if not st.session_state.get('giris_yapildi', False):
             kadi_input = st.text_input("Kullanıcı Adı")
             sifre_input = st.text_input("Şifre", type="password")
             
+            # Telegram Token ve ID alanları eklendi
+            t_token_input = st.text_input("Telegram Token", type="password")
+            t_chat_id_input = st.text_input("Telegram Chat ID")
+            
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                # Kullanıcıyı filtrele
+                # Kullanıcıyı filtrele (Supabase sütun adıyla tam uyumlu)
                 kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
                     ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici.columns else "hayır"
                     
+                    st.session_state['kullanici'] = kadi_input
+                    st.session_state['rol'] = str(yetki).strip().lower()
+                    st.session_state['telegram_token'] = t_token_input
+                    st.session_state['telegram_chat_id'] = t_chat_id_input
+                    
                     if ilk_giris == "evet":
                         st.session_state['sifre_degistirme_modu'] = True
                         st.session_state['ilk_giris_uyarisi'] = True
                         st.rerun()
                     else:
-                        son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
-                        gecen_gun = (datetime.today() - son_guncelleme).days
-                        if gecen_gun >= 90:
-                            st.session_state['sifre_degistirme_modu'] = True
-                        else:
+                        son_guncelleme_val = kullanici['Son Güncelleme'].values[0] if 'Son Güncelleme' in kullanici.columns else None
+                        if pd.isna(son_guncelleme_val):
                             st.session_state['giris_yapildi'] = True
                             st.rerun()
-                else:
-                    st.error("Kullanıcı adı veya şifre hatalı!")
                         else:
-                            son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
-                            gecen_gun = (datetime.today() - son_guncelleme).days
+                            son_guncelleme = pd.to_datetime(son_guncelleme_val, errors='coerce')
+                            gecen_gun = (datetime.today() - son_guncelleme).days if not pd.isna(son_guncelleme) else 0
                             if gecen_gun >= 90:
                                 st.session_state['sifre_degistirme_modu'] = True
+                                st.rerun()
                             else:
                                 st.session_state['giris_yapildi'] = True
                                 st.rerun()
-                    else:
-                        st.error("❌ Bu depoya giriş yetkiniz yok!")
-            else:
-                st.error("❌ Bilgiler hatalı!")
+                else:
+                    st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
     df = verileri_getir()
     bugun = datetime.now().date()
@@ -209,7 +221,7 @@ else:
                     
                     if kalan < 0:
                         st.error(f"❌ {uyari_baslik} - TARİHİ GEÇTİ! ({skt_metni})")
-                        telegram_raporu += f"{lik} - TARİHİ GEÇTİ!\n"
+                        telegram_raporu += f"{uyari_baslik} - TARİHİ GEÇTİ!\n"
                         krt_sayisi += 1
                     elif 0 <= kalan <= 30:
                         st.warning(f"⚠️ {uyari_baslik} - SKT'ye {kalan} gün kaldı! ({skt_metni})")
@@ -258,24 +270,24 @@ else:
         with st.form("urun_ekle_formu"):
             col1, col2 = st.columns(2)
         
-        with col1:
-            stok_no = st.text_input("Stok Numarası (Barkod)")
-            urun_adi = st.text_input("Ürün Adı")
-            miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
-            birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket"])
-            alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
-            
-        with col2:
-            kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
-            uretim_tarihi = st.date_input("Üretim Tarihi")
-            skt = st.date_input("Son Kullanma Tarihi (SKT)")
-            
-            st.markdown("---")
-            sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
-            sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
-            sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
-            sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
-            
+            with col1:
+                stok_no = st.text_input("Stok Numarası (Barkod)")
+                urun_adi = st.text_input("Ürün Adı")
+                miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
+                birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket"])
+                alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
+                
+            with col2:
+                kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
+                uretim_tarihi = st.date_input("Üretim Tarihi")
+                skt = st.date_input("Son Kullanma Tarihi (SKT)")
+                
+                st.markdown("---")
+                sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
+                sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
+                sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
+                sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
+                
             ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         
         if ekle_btn:
