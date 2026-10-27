@@ -120,8 +120,15 @@ if st.session_state['sifre_degistirme_modu']:
         if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
-            guncelleme_data = {"Sifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
-            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adi", guncelleme_data)
+            
+            # Sütun adını esnek bulma
+            sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
+            gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
+            ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
+            kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower()), 'Kullanıcı Adi')
+            
+            guncelleme_data = {sifre_col: yeni_sifre_hash, gun_col: bugun, ilk_col: "Hayır"}
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], kadi_col, guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
@@ -143,41 +150,50 @@ if not st.session_state.get('giris_yapildi', False):
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                # Sabit ve doğrudan Supabase sütun adlarıyla eşleştirme
-                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar['Sifre'].astype(str).str.strip() == str(girilen_hash).strip())]
-                
-                if not kullanici.empty:
-                    yetki = kullanici['Yetki'].values[0]
-                    ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici.columns else "hayır"
-                    
-                    st.session_state['kullanici'] = kadi_input
-                    st.session_state['rol'] = str(yetki).strip().lower()
-                    
-                    if 'Telegram Token' in kullanici.columns and not pd.isna(kullanici['Telegram Token'].values[0]):
-                        st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
-                    if 'Telegram Chat ID' in kullanici.columns and not pd.isna(kullanici['Telegram Chat ID'].values[0]):
-                        st.session_state['telegram_chat_id'] = str(kullanici['Telegram Chat ID'].values[0])
+                if df_kullanicilar.empty:
+                    st.error("❌ Kullanıcılar tablosuna ulaşılamadı veya tablo boş.")
+                else:
+                    # Sütun adlarını esnek tespit etme (büyük/küçük harf ve Türkçe karakter duyarsız)
+                    kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[1] if len(df_kullanicilar.columns) > 1 else df_kullanicilar.columns[0])
+                    sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
+                    yetki_col = next((c for c in df_kullanicilar.columns if 'yetki' in c.lower()), 'Yetki')
+                    ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
+                    gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
 
-                    if ilk_giris == "evet":
-                        st.session_state['sifre_degistirme_modu'] = True
-                        st.session_state['ilk_giris_uyarisi'] = True
-                        st.rerun()
-                    else:
-                        son_gun_val = kullanici['Son Güncelleme'].values[0] if 'Son Güncelleme' in kullanici.columns else None
-                        if pd.isna(son_gun_val):
-                            st.session_state['giris_yapildi'] = True
+                    kullanici = df_kullanicilar[(df_kullanicilar[kadi_col].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar[sifre_col].astype(str).str.strip() == str(girilen_hash).strip())]
+                    
+                    if not kullanici.empty:
+                        yetki = kullanici[yetki_col].values[0] if yetki_col in kullanici.columns else "personel"
+                        ilk_giris = str(kullanici[ilk_col].values[0]).strip().lower() if ilk_col in kullanici.columns else "hayır"
+                        
+                        st.session_state['kullanici'] = kadi_input
+                        st.session_state['rol'] = str(yetki).strip().lower()
+                        
+                        if 'Telegram Token' in kullanici.columns and not pd.isna(kullanici['Telegram Token'].values[0]):
+                            st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
+                        if 'Telegram Chat ID' in kullanici.columns and not pd.isna(kullanici['Telegram Chat ID'].values[0]):
+                            st.session_state['telegram_chat_id'] = str(kullanici['Telegram Chat ID'].values[0])
+
+                        if ilk_giris == "evet":
+                            st.session_state['sifre_degistirme_modu'] = True
+                            st.session_state['ilk_giris_uyarisi'] = True
                             st.rerun()
                         else:
-                            son_guncelleme = pd.to_datetime(son_gun_val, errors='coerce')
-                            gecen_gun = (datetime.today() - son_guncelleme).days if not pd.isna(son_guncelleme) else 0
-                            if gecen_gun >= 90:
-                                st.session_state['sifre_degistirme_modu'] = True
-                                st.rerun()
-                            else:
+                            son_gun_val = kullanici[gun_col].values[0] if gun_col in kullanici.columns else None
+                            if pd.isna(son_gun_val):
                                 st.session_state['giris_yapildi'] = True
                                 st.rerun()
-                else:
-                    st.error("❌ Kullanıcı adı veya şifre hatalı!")
+                            else:
+                                son_guncelleme = pd.to_datetime(son_gun_val, errors='coerce')
+                                gecen_gun = (datetime.today() - son_guncelleme).days if not pd.isna(son_guncelleme) else 0
+                                if gecen_gun >= 90:
+                                    st.session_state['sifre_degistirme_modu'] = True
+                                    st.rerun()
+                                else:
+                                    st.session_state['giris_yapildi'] = True
+                                    st.rerun()
+                    else:
+                        st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
     df = verileri_getir()
     bugun = datetime.now().date()
@@ -507,46 +523,4 @@ else:
                                     st.warning(f"⚠️ SÖZLEŞME UYARISI! {uyari_metni} - Bitişine **{kalan_gun} gün** kaldı.")
                             except: pass
                 else:
-                    st.info("Şu an sistemde kayıtlı bir 'Piyasa Alımı' sözleşmesi bulunmamaktadır.")
-            else:
-                st.info("Sözleşme sistemi henüz aktif edilmedi.")
-        else:
-            st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
-
-    with sekme8:
-        st.subheader("💬 Geri Bildirim ve Talep Formu")
-        
-        with st.form("geri_bildirim_formu"):
-            tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Yeni Özellik İsteği", "Öneri / Görüş"])
-            mesaj = st.text_area("Mesajınız / Talebiniz:")
-            gonder_btn = st.form_submit_button("Geri Bildirimi Gönder", use_container_width=True)
-            
-            if gonder_btn:
-                if mesaj.strip():
-                    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    df_gb = geri_bildirimleri_getir()
-                    yeni_id = 1 if df_gb.empty else int(df_gb['ID'].max()) + 1
-                    
-                    gb_data = {
-                        "ID": yeni_id,
-                        "Tarih": zaman,
-                        "Kullanıcı": st.session_state['kullanici'],
-                        "Tür": tur,
-                        "Mesaj": mesaj
-                    }
-                    
-                    if supabase_insert("Geri_Bildirimler", gb_data):
-                        st.success("✅ Geri bildiriminiz başarıyla iletildi.")
-                    else:
-                        st.error("❌ İletilemedi.")
-                else:
-                    st.error("Lütfen mesaj alanını boş bırakmayın.")
-                    
-        if st.session_state['rol'] == 'admin':
-            st.divider()
-            st.subheader("📥 Gelen Geri Bildirimler")
-            df_gb = geri_bildirimleri_getir()
-            if not df_gb.empty:
-                st.dataframe(df_gb, use_container_width=True, hide_index=True)
-            else:
-                st.info("Henüz geri bildirim bulunmuyor.")
+                    st.info("Şu an
