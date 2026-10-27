@@ -141,8 +141,7 @@ if not st.session_state['giris_yapildi']:
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
-                kullanici = df_kullanicilar[
-                    (df_kullanicilar['Kullanıcı Adı'] == kadi_input) & 
+               if (df_kullanicilar['Kullanıcı Adi'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash): & 
                     ((df_kullanicilar['Şifre'].astype(str) == str(sifre_input)) | (df_kullanicilar['Şifre'].astype(str) == girilen_hash))
                 ]
                 
