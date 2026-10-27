@@ -205,7 +205,7 @@ else:
                     
                     if kalan < 0:
                         st.error(f"❌ {uyari_baslik} - TARİHİ GEÇTİ! ({skt_metni})")
-                        telegram_raporu += f"lik} - TARİHİ GEÇTİ!\n"
+                        telegram_raporu += f"{lik} - TARİHİ GEÇTİ!\n"
                         krt_sayisi += 1
                     elif 0 <= kalan <= 30:
                         st.warning(f"⚠️ {uyari_baslik} - SKT'ye {kalan} gün kaldı! ({skt_metni})")
