@@ -148,10 +148,15 @@ if not st.session_state.get('giris_yapildi', False):
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                if df_kullanicilar.empty:
-                    st.error("❌ 'Kullanıcılar' tablosundan veri alınamadı. Lütfen Supabase tablo adını kontrol edin.")
+                # Supabase tablosu boş olsa bile Gida_Sorumlusu için acil geçiş mekanizması
+                if df_kullanicilar.empty and str(kadi_input).strip() == "Gida_Sorumlusu" and str(sifre_input).strip() == "Efee5307":
+                    st.session_state['giris_yapildi'] = True
+                    st.session_state['kullanici'] = "Gida_Sorumlusu"
+                    st.session_state['rol'] = "admin"
+                    st.rerun()
+                elif df_kullanicilar.empty:
+                    st.error("❌ 'Kullanıcılar' tablosundan veri alınamadı.")
                 else:
-                    # Tablodaki sütunları tam eşleştirme
                     if 'Kullanıcı Adi' in df_kullanicilar.columns and 'Sifre' in df_kullanicilar.columns:
                         kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar['Sifre'].astype(str).str.strip() == str(girilen_hash).strip())]
                     else:
