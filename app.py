@@ -129,12 +129,15 @@ if st.session_state['sifre_degistirme_modu']:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
             
-            sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
-            gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
-            ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
-            kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), 'Kullanıcı Adi')
+            kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[1] if len(df_kullanicilar.columns) > 1 else df_kullanicilar.columns[0])
+            sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), df_kullanicilar.columns[3] if len(df_kullanicilar.columns) > 3 else df_kullanicilar.columns[0])
+            ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), None)
+            gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), None)
             
-            guncelleme_data = {sifre_col: yeni_sifre_hash, gun_col: bugun, ilk_col: "Hayır"}
+            guncelleme_data = {sifre_col: yeni_sifre_hash}
+            if gun_col: guncelleme_data[gun_col] = bugun
+            if ilk_col: guncelleme_data[ilk_col] = "Hayır"
+            
             supabase_update(aktif_tablo, st.session_state['kullanici'], kadi_col, guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
@@ -160,20 +163,21 @@ if not st.session_state.get('giris_yapildi', False):
                 if df_kullanicilar.empty:
                     st.error("❌ Kullanıcılar tablosuna ulaşılamadı veya tablo boş.")
                 else:
-                    kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[1] if len(df_kullanicilar.columns) > 1 else df_kullanicilar.columns[0])
-                    sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), 'Sifre')
-                    yetki_col = next((c for c in df_kullanicilar.columns if 'yetki' in c.lower()), 'Yetki')
-                    ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), 'İlk Giriş')
-                    gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), 'Son Güncelleme')
+                    # Kesin eşleştirme için sütunları otomatik buluyoruz
+                    kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[2] if len(df_kullanicilar.columns) > 2 else df_kullanicilar.columns[0])
+                    sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), df_kullanicilar.columns[3] if len(df_kullanicilar.columns) > 3 else df_kullanicilar.columns[0])
+                    yetki_col = next((c for c in df_kullanicilar.columns if 'yetki' in c.lower()), None)
+                    ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), None)
+                    gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), None)
 
                     kullanici = df_kullanicilar[(df_kullanicilar[kadi_col].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar[sifre_col].astype(str).str.strip() == str(girilen_hash).strip())]
                     
                     if not kullanici.empty:
-                        yetki = kullanici[yetki_col].values[0] if yetki_col in kullanici.columns else "personel"
-                        ilk_giris = str(kullanici[ilk_col].values[0]).strip().lower() if ilk_col in kullanici.columns else "hayır"
+                        yetki = kullanici[yetki_col].values[0] if yetki_col and yetki_col in kullanici.columns else "Yönetici"
+                        ilk_giris = str(kullanici[ilk_col].values[0]).strip().lower() if ilk_col and ilk_col in kullanici.columns else "hayır"
                         
                         st.session_state['kullanici'] = kadi_input
-                        st.session_state['rol'] = str(yetki).strip().lower()
+                        st.session_state['rol'] = "admin" if str(yetki).strip().lower() in ["yönetici", "yonetici", "admin"] else "personel"
                         
                         if 'Telegram Token' in kullanici.columns and not pd.isna(kullanici['Telegram Token'].values[0]):
                             st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0])
@@ -185,8 +189,8 @@ if not st.session_state.get('giris_yapildi', False):
                             st.session_state['ilk_giris_uyarisi'] = True
                             st.rerun()
                         else:
-                            son_gun_val = kullanici[gun_col].values[0] if gun_col in kullanici.columns else None
-                            if pd.isna(son_gun_val):
+                            son_gun_val = kullanici[gun_col].values[0] if gun_col and gun_col in kullanici.columns else None
+                            if pd.isna(son_gun_val) or not son_gun_val:
                                 st.session_state['giris_yapildi'] = True
                                 st.rerun()
                             else:
