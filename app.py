@@ -9,8 +9,6 @@ import requests
 import cv2
 import numpy as np
 import json
-import gspread
-from google.oauth2.service_account import Credentials
 import hashlib
 import base64
 
@@ -19,75 +17,75 @@ st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
-# --- GİZLİ KASA AYARLARI ---
+# --- SUPABASE BAĞLANTI AYARLARI ---
 try:
-    google_json_str = st.secrets["google_json"]
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except:
-    st.error("Gizli kasa (Secrets) ayarları bulunamadı!")
+    st.error("Supabase bilgileri Secrets içinde bulunamadı!")
     st.stop()
 
-# --- GOOGLE SHEETS BAĞLANTISI ---
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds_dict = json.loads(google_json_str)
-creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-client = gspread.authorize(creds)
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
-try:
-    sheet = client.open('MİDES - Gıda Deposu')
-    kullanici_tablosu = client.open("MİDES - Kullanıcılar").get_worksheet(0)
-    df_kullanicilar = pd.DataFrame(kullanici_tablosu.get_all_records())
-except:
-    st.error("Google Drive'da gerekli tablolar bulunamadı. 'MİDES - Kullanıcılar' ve 'MİDES - Gıda Deposu' tablolarını kontrol edin.")
-    st.stop()
+def supabase_get(table):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?select=*"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 200:
+        return response.json()
+    return []
 
-try:
-    ws_malzemeler = sheet.worksheet("Malzemeler")
-    headers = ws_malzemeler.row_values(1)
-    if "Alım Türü" not in headers:
-        ws_malzemeler.update_cell(1, 12, "Alım Türü")
-        ws_malzemeler.update_cell(1, 13, "Sözleşme No")
-        ws_malzemeler.update_cell(1, 14, "Sözleşme Tarihi")
-        ws_malzemeler.update_cell(1, 15, "Sözleşme Bitiş Tarihi")
-    if "Sözleşme Kritik" not in ws_malzemeler.row_values(1):
-        ws_malzemeler.update_cell(1, 16, "Sözleşme Kritik")
-except:
-    ws_malzemeler = sheet.add_worksheet(title="Malzemeler", rows="1000", cols="20")
-    ws_malzemeler.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik"])
+def supabase_insert(table, data):
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    response = requests.post(url, headers=HEADERS, json=data)
+    return response.status_code in [200, 201]
 
-try:
-    ws_hareket = sheet.worksheet("Hareket_Gecmisi")
-except:
-    ws_hareket = sheet.add_worksheet(title="Hareket_Gecmisi", rows="1000", cols="10")
-    ws_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
+def supabase_update(table, id_val, id_col, data):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{id_col}=eq.{id_val}"
+    response = requests.patch(url, headers=HEADERS, json=data)
+    return response.status_code == 200
 
-try:
-    ws_geri_bildirim = sheet.worksheet("Geri_Bildirimler")
-except:
-    ws_geri_bildirim = sheet.add_worksheet(title="Geri_Bildirimler", rows="1000", cols="10")
-    ws_geri_bildirim.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
-
-def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
-    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    mevcut_id = len(ws_hareket.get_all_values())
-    ws_hareket.append_row([mevcut_id, zaman, kullanici, islem_tipi, urun_adi, miktar, aciklama])
+def supabase_delete(table, id_val, id_col):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{id_col}=eq.{id_val}"
+    response = requests.delete(url, headers=HEADERS)
+    return response.status_code == 204
 
 def verileri_getir():
-    kayitlar = ws_malzemeler.get_all_records()
+    kayitlar = supabase_get("Malzemeler")
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik"])
     return pd.DataFrame(kayitlar)
 
 def hareketleri_getir():
-    kayitlar = ws_hareket.get_all_records()
+    kayitlar = supabase_get("Hareket_Gecmisi")
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
     return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
 
 def geri_bildirimleri_getir():
-    kayitlar = ws_geri_bildirim.get_all_records()
+    kayitlar = supabase_get("Geri_Bildirimler")
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
     return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
+
+def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
+    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    df_hareket = hareketleri_getir()
+    yeni_id = 1 if df_hareket.empty else int(df_hareket['ID'].max()) + 1
+    data = {
+        "ID": yeni_id,
+        "Tarih": zaman,
+        "Kullanıcı": kullanici,
+        "İşlem": islem_tipi,
+        "Ürün Adı": urun_adi,
+        "Miktar": miktar,
+        "Açıklama": aciklama
+    }
+    supabase_insert("Hareket_Gecmisi", data)
 
 def qr_olustur(metin):
     qr = qrcode.QRCode(version=1, box_size=6, border=2)
@@ -108,7 +106,9 @@ def telegram_mesaj_gonder(mesaj):
             try: requests.post(url, data=payload)
             except: pass
 
-# --- YENİ OTURUM VE ŞİFRE YÖNETİMİ ---
+# --- OTURUM YÖNETİMİ ---
+df_kullanicilar = pd.DataFrame(supabase_get("Kullanıcılar"))
+
 if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
 
@@ -116,38 +116,28 @@ if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'):
         st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
     else:
-        st.warning("⚠️ Şifrenizin kullanım süresi (90 gün) dolmuş veya değişiklik talep ettiniz. Lütfen yeni şifre belirleyin.")
+        st.warning("⚠️ Şifrenizin kullanım süresi dolmuş. Lütfen yeni şifre belirleyin.")
         
     yeni_sifre = st.text_input("Yeni Şifre:", type="password")
     yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar):", type="password")
     
     if st.button("Şifreyi Güncelle"):
         if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
-            satir_no = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].index[0] + 2
             bugun = datetime.today().strftime('%Y-%m-%d')
-            
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
-            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre_hash)
-            kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
+            guncelleme_data = {"Şifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adı", guncelleme_data)
             
-            if 'İlk Giriş' in df_kullanicilar.columns:
-                kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('İlk Giriş') + 1, 'Hayır')
-            
-            st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek yeni şifrenizle giriş yapın.")
+            st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
             st.session_state['giris_yapildi'] = False
             st.session_state['ilk_giris_uyarisi'] = False
             st.stop()
         else:
-            st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+            st.error("Şifreler uyuşmuyor veya çok kısa.")
     st.stop()
 
 if not st.session_state['giris_yapildi']:
-    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
-    with c_img2:
-        try: st.image("amblem.png", use_container_width=True)
-        except: pass
-        
     st.markdown("<h1 style='text-align: center;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -163,10 +153,9 @@ if not st.session_state['giris_yapildi']:
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
-                    if yetki == "Gida" or yetki == "Yonetici":
+                    if yetki in ["Gida", "Yonetici"]:
                         st.session_state['kullanici'] = kadi_input
                         st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
-                        
                         st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0]) if 'Telegram Token' in kullanici else ""
                         st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0]) if 'Chat ID' in kullanici else ""
                         
@@ -178,33 +167,23 @@ if not st.session_state['giris_yapildi']:
                         else:
                             son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
                             gecen_gun = (datetime.today() - son_guncelleme).days
-                            kalan_gun = 90 - gecen_gun
-                            
                             if gecen_gun >= 90:
                                 st.session_state['sifre_degistirme_modu'] = True
                             else:
-                                st.session_state['sifre_degistirme_modu'] = False
                                 st.session_state['giris_yapildi'] = True
-                                
-                                if kalan_gun <= 5:
-                                    st.warning(f"⚠️ Dikkat: Şifrenizin geçerlilik süresinin dolmasına {kalan_gun} gün kalmıştır.")
-                                
                                 st.rerun()
                     else:
-                        st.error("❌ Bu depoya giriş yetkiniz bulunmamaktadır!")
+                        st.error("❌ Bu depoya giriş yetkiniz yok!")
             else:
-                st.error("❌ Kullanıcı adı veya şifre hatalı!")
+                st.error("❌ Bilgiler hatalı!")
 else:
     df = verileri_getir()
     bugun = datetime.now().date()
-                        
+    
     c_ust1, c_ust2 = st.columns([4, 1])
     with c_ust1: st.title("📦 MİDES - Merkezi İkmal ve Depo Sistemi")
     with c_ust2:
         st.write(f"👤 {st.session_state['kullanici']} ({'Yönetici' if st.session_state['rol'] == 'admin' else 'Personel'})")
-        if st.button("🔄 Şifre Değiştir"):
-            st.session_state['sifre_degistirme_modu'] = True
-            st.rerun()
         if st.button("🚪 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
@@ -231,7 +210,7 @@ else:
                     
                     if kalan < 0:
                         st.error(f"❌ {uyari_baslik} - TARİHİ GEÇTİ! ({skt_metni})")
-                        telegram_raporu += f"❌ {uyari_baslik} - TARİHİ GEÇTİ!\n"
+                        telegram_raporu += f"lik} - TARİHİ GEÇTİ!\n"
                         krt_sayisi += 1
                     elif 0 <= kalan <= 30:
                         st.warning(f"⚠️ {uyari_baslik} - SKT'ye {kalan} gün kaldı! ({skt_metni})")
@@ -296,7 +275,7 @@ else:
             sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
             sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
             sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
-            sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı (Örn: 20 Kg)", min_value=0.0, value=20.0, step=1.0)
+            sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
             
             ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         
@@ -310,14 +289,31 @@ else:
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
                 s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
 
-                yeni_satir = [yeni_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt]
+                yeni_satir = {
+                    "ID": yeni_id,
+                    "Stok No": stok_no,
+                    "Ürün Adı": urun_adi,
+                    "Miktar": miktar,
+                    "Birim": birim,
+                    "Eklenme Tarihi": bugun_tarih,
+                    "SKT": str(skt),
+                    "Üretim Tarihi": str(uretim_tarihi),
+                    "Giriş Tarihi": bugun_tarih,
+                    "Resim Yolu": "",
+                    "Kritik Stok": kritik_seviye,
+                    "Alım Türü": alim_turu,
+                    "Sözleşme No": s_no,
+                    "Sözleşme Tarihi": s_tar,
+                    "Sözleşme Bitiş Tarihi": s_bit,
+                    "Sözleşme Kritik": s_krt
+                }
                 
-                satir_tam = yeni_satir + [""] * max(0, len(ws_malzemeler.row_values(1)) - len(yeni_satir))
-                ws_malzemeler.append_row(satir_tam[:len(ws_malzemeler.row_values(1))])
-                
-                log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
-                st.success(f"✅ {urun_adi} depoya başarıyla kaydedildi! Sayfa yenileniyor...")
-                st.rerun()
+                if supabase_insert("Malzemeler", yeni_satir):
+                    log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
+                    st.success(f"✅ {urun_adi} depoya başarıyla kaydedildi! Sayfa yenileniyor...")
+                    st.rerun()
+                else:
+                    st.error("❌ Ürün kaydedilirken bir hata oluştu.")
             else:
                 st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
 
@@ -346,24 +342,29 @@ else:
                 sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
                 
                 if kaydet_tik:
-                    satir = df[df['ID'] == secili_id].index[0] + 2
-                    ws_malzemeler.update_cell(satir, 2, yeni_stok) 
-                    ws_malzemeler.update_cell(satir, 4, urun_miktar - cikis + giris)  
-                    ws_malzemeler.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
-                    ws_malzemeler.update_cell(satir, 11, y_kritik) 
+                    data_to_update = {
+                        "Stok No": yeni_stok,
+                        "Miktar": urun_miktar - cikis + giris,
+                        "SKT": y_skt.strftime('%Y-%m-%d'),
+                        "Kritik Stok": y_kritik
+                    }
                     
-                    if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
-                    if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
-                    st.success("Güncellendi!")
-                    st.rerun()
+                    if supabase_update("Malzemeler", secili_id, "ID", data_to_update):
+                        if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
+                        if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
+                        st.success("Güncellendi!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Güncelleme sırasında hata oluştu.")
                     
                 if sil_tik:
                     if st.session_state['rol'] == 'admin':
-                        satir = df[df['ID'] == secili_id].index[0] + 2
-                        ws_malzemeler.delete_rows(satir)
-                        log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün depodan tamamen kaldırıldı")
-                        st.success(f"🗑️ {urun['Ürün Adı']} depodan silindi!")
-                        st.rerun()
+                        if supabase_delete("Malzemeler", secili_id, "ID"):
+                            log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün depodan tamamen kaldırıldı")
+                            st.success(f"🗑️ {urun['Ürün Adı']} depodan silindi!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Ürün silinirken bir hata oluştu.")
                     else:
                         st.error("❌ Ürün silme yetkisi yalnızca Yöneticilere aittir!")
 
@@ -389,11 +390,14 @@ else:
                     m_ekle = st.number_input("➕ Ekle:", min_value=0, step=1)
                     if st.form_submit_button("💾 Güncelle", type="primary"):
                         if m_dus > 0 or m_ekle > 0:
-                            ws_malzemeler.update_cell(eslesen.index[0] + 2, 4, int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle)
-                            if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
-                            if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
-                            st.success("Stok güncellendi!")
-                            st.rerun()
+                            yeni_miktar = int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle
+                            if supabase_update("Malzemeler", eslesen.iloc[0]['ID'], "ID", {"Miktar": yeni_miktar}):
+                                if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
+                                if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
+                                st.success("Stok güncellendi!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Güncelleme sırasında hata oluştu.")
             else: st.error("❌ Ürün bulunamadı.")
 
     with sekme4:
@@ -408,7 +412,7 @@ else:
             
             with c_kart2:
                 st.markdown("**Toplu QR Kod Çıktısı (A4)**")
-                st.info("Tüm ürün barkodlarını A4 formatında yazdırabileceğiniz belgeyi indirin. Dosyayı açıp 'Yazdır' (Ctrl+P) yaparak raflara yapıştırabilirsiniz.")
+                st.info("Tüm ürün barkodlarını A4 formatında yazdırabileceğiniz belgeyi indirin.")
                 
                 html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo QR Barkod Listesi</h2><div class='grid'>"
                 for _, row in df.iterrows():
@@ -509,7 +513,6 @@ else:
 
     with sekme8:
         st.subheader("💬 Geri Bildirim ve Talep Formu")
-        st.markdown("Sistemle ilgili karşılaştığınız hataları, eksiklikleri veya eklenmesini istediğiniz yeni özellikleri buradan bildirebilirsiniz.")
         
         with st.form("geri_bildirim_formu"):
             tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Yeni Özellik İsteği", "Öneri / Görüş"])
@@ -519,17 +522,29 @@ else:
             if gonder_btn:
                 if mesaj.strip():
                     zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    mevcut_id = len(ws_geri_bildirim.get_all_values())
-                    ws_geri_bildirim.append_row([mevcut_id, zaman, st.session_state['kullanici'], tur, mesaj])
-                    st.success("✅ Geri bildiriminiz başarıyla iletildi. Teşekkür ederiz!")
+                    df_gb = geri_bildirimleri_getir()
+                    yeni_id = 1 if df_gb.empty else int(df_gb['ID'].max()) + 1
+                    
+                    gb_data = {
+                        "ID": yeni_id,
+                        "Tarih": zaman,
+                        "Kullanıcı": st.session_state['kullanici'],
+                        "Tür": tur,
+                        "Mesaj": mesaj
+                    }
+                    
+                    if supabase_insert("Geri_Bildirimler", gb_data):
+                        st.success("✅ Geri bildiriminiz başarıyla iletildi.")
+                    else:
+                        st.error("❌ İletilemedi.")
                 else:
                     st.error("Lütfen mesaj alanını boş bırakmayın.")
                     
         if st.session_state['rol'] == 'admin':
             st.divider()
-            st.subheader("📥 Gelen Geri Bildirimler (Yönetici Paneli)")
+            st.subheader("📥 Gelen Geri Bildirimler")
             df_gb = geri_bildirimleri_getir()
             if not df_gb.empty:
                 st.dataframe(df_gb, use_container_width=True, hide_index=True)
             else:
-                st.info("Henüz gönderilmiş bir geri bildirim bulunmuyor.")
+                st.info("Henüz geri bildirim bulunmuyor.")
