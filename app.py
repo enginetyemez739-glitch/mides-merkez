@@ -143,22 +143,26 @@ if not st.session_state.get('giris_yapildi', False):
                 girilen_hash = sifre_hashle(sifre_input)
                 
                 # Kullanıcıyı filtrele
-                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adı'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
+                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
-                    st.session_state['kullanici'] = kadi_input
-                    st.session_state['sayfa'] = "Admin" if yetki == "Yönetici" else "personel"
-                    st.session_state['giris_yapildi'] = True
-                    st.rerun()
+                    ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici.columns else "hayır"
+                    
+                    if ilk_giris == "evet":
+                        st.session_state['sifre_degistirme_modu'] = True
+                        st.session_state['ilk_giris_uyarisi'] = True
+                        st.rerun()
+                    else:
+                        son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
+                        gecen_gun = (datetime.today() - son_guncelleme).days
+                        if gecen_gun >= 90:
+                            st.session_state['sifre_degistirme_modu'] = True
+                        else:
+                            st.session_state['giris_yapildi'] = True
+                            st.rerun()
                 else:
                     st.error("Kullanıcı adı veya şifre hatalı!")
-                        
-                    ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
-                if ilk_giris == "evet":
-                            st.session_state['sifre_degistirme_modu'] = True
-                            st.session_state['ilk_giris_uyarisi'] = True
-                            st.rerun()
                         else:
                             son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
                             gecen_gun = (datetime.today() - son_guncelleme).days
