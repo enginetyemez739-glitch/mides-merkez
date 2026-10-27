@@ -121,7 +121,7 @@ if st.session_state['sifre_degistirme_modu']:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
             guncelleme_data = {"Sifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
-            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adi", guncelleme_data)
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adı", guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
@@ -143,8 +143,8 @@ if not st.session_state.get('giris_yapildi', False):
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                # Kullanıcıyı filtrele (Supabase sütun adıyla tam uyumlu: 'Kullanıcı Adi' ve 'Sifre')
-                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
+                # Kullanıcıyı filtrele (Supabase sütun adıyla tam uyumlu: 'Kullanıcı Adı' ve 'Sifre')
+                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adı'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
