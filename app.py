@@ -8,7 +8,6 @@ from PIL import Image
 import requests
 import cv2
 import numpy as np
-import json
 import hashlib
 import base64
 
@@ -18,12 +17,8 @@ def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
 # --- SUPABASE BAĞLANTI AYARLARI ---
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-except:
-    st.error("Supabase bilgileri Secrets içinde bulunamadı!")
-    st.stop()
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
