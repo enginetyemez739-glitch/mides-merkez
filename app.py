@@ -523,4 +523,46 @@ else:
                                     st.warning(f"⚠️ SÖZLEŞME UYARISI! {uyari_metni} - Bitişine **{kalan_gun} gün** kaldı.")
                             except: pass
                 else:
-                    st.info("Şu an
+                    st.info("Şu an sistemde kayıtlı bir 'Piyasa Alımı' sözleşmesi bulunmamaktadır.")
+            else:
+                st.info("Sözleşme sistemi henüz aktif edilmedi.")
+        else:
+            st.error("🔒 Bu sayfayı görüntüleme yetkiniz bulunmamaktadır. Sözleşme takibi sadece Yöneticiler içindir.")
+
+    with sekme8:
+        st.subheader("💬 Geri Bildirim ve Talep Formu")
+        
+        with st.form("geri_bildirim_formu"):
+            tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Yeni Özellik İsteği", "Öneri / Görüş"])
+            mesaj = st.text_area("Mesajınız / Talebiniz:")
+            gonder_btn = st.form_submit_button("Geri Bildirimi Gönder", use_container_width=True)
+            
+            if gonder_btn:
+                if mesaj.strip():
+                    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    df_gb = geri_bildirimleri_getir()
+                    yeni_id = 1 if df_gb.empty else int(df_gb['ID'].max()) + 1
+                    
+                    gb_data = {
+                        "ID": yeni_id,
+                        "Tarih": zaman,
+                        "Kullanıcı": st.session_state['kullanici'],
+                        "Tür": tur,
+                        "Mesaj": mesaj
+                    }
+                    
+                    if supabase_insert("Geri_Bildirimler", gb_data):
+                        st.success("✅ Geri bildiriminiz başarıyla iletildi.")
+                    else:
+                        st.error("❌ İletilemedi.")
+                else:
+                    st.error("Lütfen mesaj alanını boş bırakmayın.")
+                    
+        if st.session_state['rol'] == 'admin':
+            st.divider()
+            st.subheader("📥 Gelen Gelen Bildirimler")
+            df_gb = geri_bildirimleri_getir()
+            if not df_gb.empty:
+                st.dataframe(df_gb, use_container_width=True, hide_index=True)
+            else:
+                st.info("Henüz geri bildirim bulunmuyor.")
