@@ -49,13 +49,6 @@ def supabase_delete(table, id_val, id_col):
     response = requests.delete(url, headers=HEADERS)
     return response.status_code == 204
 
-def kullanicilari_getir():
-    for tbl in ["Kullanıcılar", "kullanicilar", "Users", "users"]:
-        res = supabase_get(tbl)
-        if res:
-            return res, tbl
-    return [], "Kullanıcılar"
-
 def verileri_getir():
     kayitlar = supabase_get("Malzemeler")
     if not kayitlar:
@@ -109,7 +102,10 @@ def telegram_mesaj_gonder(mesaj):
             except: pass
 
 # --- OTURUM YÖNETİMİ ---
-kullanici_ham, aktif_tablo = kullanicilari_getir()
+kullanici_ham = supabase_get("Kullanıcılar")
+if not kullanici_ham:
+    kullanici_ham = supabase_get("kullanicilar")
+
 df_kullanicilar = pd.DataFrame(kullanici_ham)
 
 if 'giris_yapildi' not in st.session_state:
@@ -129,16 +125,8 @@ if st.session_state['sifre_degistirme_modu']:
             bugun = datetime.today().strftime('%Y-%m-%d')
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
             
-            kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[1] if len(df_kullanicilar.columns) > 1 else df_kullanicilar.columns[0])
-            sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), df_kullanicilar.columns[3] if len(df_kullanicilar.columns) > 3 else df_kullanicilar.columns[0])
-            ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), None)
-            gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), None)
-            
-            guncelleme_data = {sifre_col: yeni_sifre_hash}
-            if gun_col: guncelleme_data[gun_col] = bugun
-            if ilk_col: guncelleme_data[ilk_col] = "Hayır"
-            
-            supabase_update(aktif_tablo, st.session_state['kullanici'], kadi_col, guncelleme_data)
+            guncelleme_data = {"Sifre": yeni_sifre_hash, "Son Güncelleme": bugun, "İlk Giriş": "Hayır"}
+            supabase_update("Kullanıcılar", st.session_state['kullanici'], "Kullanıcı Adi", guncelleme_data)
             
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
@@ -161,20 +149,17 @@ if not st.session_state.get('giris_yapildi', False):
                 girilen_hash = sifre_hashle(sifre_input)
                 
                 if df_kullanicilar.empty:
-                    st.error("❌ Kullanıcılar tablosuna ulaşılamadı veya tablo boş.")
+                    st.error("❌ 'Kullanıcılar' tablosundan veri alınamadı. Lütfen Supabase tablo adını kontrol edin.")
                 else:
-                    # Kesin eşleştirme için sütunları otomatik buluyoruz
-                    kadi_col = next((c for c in df_kullanicilar.columns if 'kullanıcı' in c.lower() or 'kullanici' in c.lower() or 'adi' in c.lower()), df_kullanicilar.columns[2] if len(df_kullanicilar.columns) > 2 else df_kullanicilar.columns[0])
-                    sifre_col = next((c for c in df_kullanicilar.columns if 'sifre' in c.lower() or 'şifre' in c.lower()), df_kullanicilar.columns[3] if len(df_kullanicilar.columns) > 3 else df_kullanicilar.columns[0])
-                    yetki_col = next((c for c in df_kullanicilar.columns if 'yetki' in c.lower()), None)
-                    ilk_col = next((c for c in df_kullanicilar.columns if 'ilk' in c.lower()), None)
-                    gun_col = next((c for c in df_kullanicilar.columns if 'güncelleme' in c.lower() or 'guncelleme' in c.lower()), None)
+                    # Tablodaki sütunları tam eşleştirme
+                    if 'Kullanıcı Adi' in df_kullanicilar.columns and 'Sifre' in df_kullanicilar.columns:
+                        kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adi'].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar['Sifre'].astype(str).str.strip() == str(girilen_hash).strip())]
+                    else:
+                        kullanici = pd.DataFrame()
 
-                    kullanici = df_kullanicilar[(df_kullanicilar[kadi_col].astype(str).str.strip() == str(kadi_input).strip()) & (df_kullanicilar[sifre_col].astype(str).str.strip() == str(girilen_hash).strip())]
-                    
                     if not kullanici.empty:
-                        yetki = kullanici[yetki_col].values[0] if yetki_col and yetki_col in kullanici.columns else "Yönetici"
-                        ilk_giris = str(kullanici[ilk_col].values[0]).strip().lower() if ilk_col and ilk_col in kullanici.columns else "hayır"
+                        yetki = kullanici['Yetki'].values[0] if 'Yetki' in kullanici.columns else "Yönetici"
+                        ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici.columns else "hayır"
                         
                         st.session_state['kullanici'] = kadi_input
                         st.session_state['rol'] = "admin" if str(yetki).strip().lower() in ["yönetici", "yonetici", "admin"] else "personel"
@@ -189,7 +174,7 @@ if not st.session_state.get('giris_yapildi', False):
                             st.session_state['ilk_giris_uyarisi'] = True
                             st.rerun()
                         else:
-                            son_gun_val = kullanici[gun_col].values[0] if gun_col and gun_col in kullanici.columns else None
+                            son_gun_val = kullanici['Son Güncelleme'].values[0] if 'Son Güncelleme' in kullanici.columns else None
                             if pd.isna(son_gun_val) or not son_gun_val:
                                 st.session_state['giris_yapildi'] = True
                                 st.rerun()
