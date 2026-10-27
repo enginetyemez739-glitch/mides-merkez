@@ -53,7 +53,10 @@ def supabase_delete(table, id_val, id_col):
     return response.status_code == 204
 
 def verileri_getir():
+    # Malzemeler tablosu büyük/küçük harf duyarlılığına karşı esnek çekilir
     kayitlar = supabase_get("Malzemeler")
+    if not kayitlar:
+        kayitlar = supabase_get("malzemeler")
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik"])
     return pd.DataFrame(kayitlar)
@@ -61,11 +64,15 @@ def verileri_getir():
 def hareketleri_getir():
     kayitlar = supabase_get("Hareket_Gecmisi")
     if not kayitlar:
+        kayitlar = supabase_get("hareket_gecmisi")
+    if not kayitlar:
         return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
     return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
 
 def geri_bildirimleri_getir():
     kayitlar = supabase_get("Geri_Bildirimler")
+    if not kayitlar:
+        kayitlar = supabase_get("geri_bildirimler")
     if not kayitlar:
         return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
     return pd.DataFrame(kayitlar).sort_values(by="ID", ascending=False)
@@ -135,7 +142,7 @@ if st.session_state['sifre_degistirme_modu']:
             st.session_state['sifre_degistirme_modu'] = False
             st.session_state['giris_yapildi'] = False
             st.session_state['ilk_giris_uyarisi'] = False
-            st.stop()
+            st.rerun()
         else:
             st.error("Şifreler uyuşmuyor veya çok kısa.")
     st.stop()
@@ -151,7 +158,7 @@ if not st.session_state.get('giris_yapildi', False):
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
                 
-                # Güvenli acil giriş ve normal veri tabanı eşleştirmesi
+                # Tablodan veri alınamasa bile veritabanını koruyan, giriş yapmanızı sağlayan yapı
                 if df_kullanicilar.empty:
                     if str(kadi_input).strip() == "Gida_Sorumlusu" and str(sifre_input).strip() == "Efee5307":
                         st.session_state['giris_yapildi'] = True
