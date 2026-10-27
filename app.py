@@ -154,8 +154,8 @@ if not st.session_state.get('giris_yapildi', False):
                 else:
                     st.error("Kullanıcı adı veya şifre hatalı!")
                         
-                        ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
-                        if ilk_giris == "evet":
+                    ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
+                if ilk_giris == "evet":
                             st.session_state['sifre_degistirme_modu'] = True
                             st.session_state['ilk_giris_uyarisi'] = True
                             st.rerun()
