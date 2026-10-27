@@ -131,27 +131,28 @@ if st.session_state['sifre_degistirme_modu']:
         else:
             st.error("Şifreler uyuşmuyor veya çok kısa.")
     st.stop()
-
-if not st.session_state['giris_yapildi']:
-    st.markdown("<h1 style='text-align: center;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
+if not st.session_state.get('giris_yapildi', False):
+    st.markdown("<h1 style='text-align: center;'> 📦 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form"):
             kadi_input = st.text_input("Kullanıcı Adı")
             sifre_input = st.text_input("Şifre", type="password")
+            
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 girilen_hash = sifre_hashle(sifre_input)
-               if (df_kullanicilar['Kullanıcı Adi'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash): & 
-                    ((df_kullanicilar['Şifre'].astype(str) == str(sifre_input)) | (df_kullanicilar['Şifre'].astype(str) == girilen_hash))
-                ]
+                
+                # Kullanıcıyı filtrele
+                kullanici = df_kullanicilar[(df_kullanicilar['Kullanıcı Adı'] == kadi_input) & (df_kullanicilar['Sifre'] == girilen_hash)]
                 
                 if not kullanici.empty:
                     yetki = kullanici['Yetki'].values[0]
-                    if yetki in ["Gida", "Yonetici"]:
-                        st.session_state['kullanici'] = kadi_input
-                        st.session_state['rol'] = "admin" if yetki == "Yonetici" else "personel"
-                        st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0]) if 'Telegram Token' in kullanici else ""
-                        st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0]) if 'Chat ID' in kullanici else ""
+                    st.session_state['kullanici'] = kadi_input
+                    st.session_state['sayfa'] = "Admin" if yetki == "Yönetici" else "personel"
+                    st.session_state['giris_yapildi'] = True
+                    st.rerun()
+                else:
+                    st.error("Kullanıcı adı veya şifre hatalı!")
                         
                         ilk_giris = str(kullanici['İlk Giriş'].values[0]).strip().lower() if 'İlk Giriş' in kullanici else "hayır"
                         if ilk_giris == "evet":
