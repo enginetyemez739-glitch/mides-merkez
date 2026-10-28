@@ -84,7 +84,7 @@ def verileri_getir(ws):
     kayitlar = ws.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
-        df['GS_Row'] = df.index + 2  # Google Sheets'teki gerçek satır numarasını tut
+        df['GS_Row'] = df.index + 2
         if 'Depo Sahibi' in df.columns:
             df = df[df['Depo Sahibi'].astype(str) == st.session_state['kullanici']]
     else:
@@ -95,7 +95,6 @@ def hareketleri_getir():
     kayitlar = ws_hareket.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
-        # Sadece Kendi Geçmişini Gör
         df = df[df['Kullanıcı'].astype(str) == st.session_state['kullanici']]
         return df.sort_values(by="ID", ascending=False)
     return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
@@ -238,7 +237,6 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    # Yöneticiler için ekstra sekme ekle
     if st.session_state['rol'] == 'admin':
         sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Kendi Geçmişim", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi"])
     else:
@@ -342,7 +340,6 @@ else:
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
                 s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
                 
-                # Gizli Yalıtım Mührü (Depo Sahibi)
                 sahip = st.session_state['kullanici']
 
                 yeni_satir = [y_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt, sahip]
@@ -381,7 +378,7 @@ else:
                 sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
                 
                 if kaydet_tik:
-                    satir = int(urun['GS_Row']) # Hedefi asla şaşırmaması için gerçek satır no
+                    satir = int(urun['GS_Row'])
                     aktif_ws.update_cell(satir, 2, yeni_stok) 
                     aktif_ws.update_cell(satir, 4, urun_miktar - cikis + giris)  
                     aktif_ws.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
@@ -476,7 +473,7 @@ else:
             else:
                 st.info("Kendi deponuzda kayıtlı sözleşmeli alımınız yoktur.")
 
-   with sekme8:
+    with sekme8:
         st.subheader("💬 Geri Bildirim")
         with st.form("geri_bildirim_formu"):
             tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Soru / Talep"])
@@ -486,7 +483,6 @@ else:
                 ws_geri_bildirim.append_row([len(ws_geri_bildirim.get_all_values()), zaman, st.session_state['kullanici'], tur, mesaj])
                 st.success("İletildi!")
 
-        # SADECE YÖNETİCİYE ÖZEL GELEN BİLDİRİMLERİ GÖRME ALANI
         if st.session_state['rol'] == 'admin':
             st.divider()
             st.subheader("📥 Gelen Tüm Geri Bildirimler (Sadece Size Özel)")
@@ -496,7 +492,6 @@ else:
             else:
                 st.info("Henüz kimse geri bildirim göndermemiş.")
 
-    # --- SADECE YÖNETİCİYE ÖZEL HESAP AÇMA BÖLÜMÜ ---
     if st.session_state['rol'] == 'admin':
         with sekme9:
             st.subheader("👥 Yeni Müşteri / Kullanıcı Hesabı Aç")
