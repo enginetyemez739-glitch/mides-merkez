@@ -56,22 +56,27 @@ def baslik_kontrol(ws):
         if "Depo Sahibi" not in ws.row_values(1):
             ws.update_cell(1, 17, "Depo Sahibi")
 
-try: ws_gida = sheet.worksheet("gida_deposu")
-except: ws_gida = sheet.add_worksheet(title="gida_deposu", rows="1000", cols="20")
+# GOOGLE API HIZ LİMİTİ KORUMASI (Tek Seferde Yükleme)
+mevcut_sekmeler = {ws.title: ws for ws in sheet.worksheets()}
+
+def get_or_create_ws(baslik, cols="20"):
+    if baslik in mevcut_sekmeler:
+        return mevcut_sekmeler[baslik]
+    else:
+        return sheet.add_worksheet(title=baslik, rows="1000", cols=cols)
+
+ws_gida = get_or_create_ws("gida_deposu")
 baslik_kontrol(ws_gida)
 
-try: ws_temizlik = sheet.worksheet("temizlik_deposu")
-except: ws_temizlik = sheet.add_worksheet(title="temizlik_deposu", rows="1000", cols="20")
+ws_temizlik = get_or_create_ws("temizlik_deposu")
 baslik_kontrol(ws_temizlik)
 
-try: ws_hareket = sheet.worksheet("Hareket_Gecmisi")
-except:
-    ws_hareket = sheet.add_worksheet(title="Hareket_Gecmisi", rows="1000", cols="10")
+ws_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
+if not ws_hareket.row_values(1):
     ws_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama"])
 
-try: ws_geri_bildirim = sheet.worksheet("Geri_Bildirimler")
-except:
-    ws_geri_bildirim = sheet.add_worksheet(title="Geri_Bildirimler", rows="1000", cols="10")
+ws_geri_bildirim = get_or_create_ws("Geri_Bildirimler", cols="10")
+if not ws_geri_bildirim.row_values(1):
     ws_geri_bildirim.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj"])
 
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
@@ -79,7 +84,7 @@ def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     mevcut_id = len(ws_hareket.get_all_values())
     ws_hareket.append_row([mevcut_id, zaman, kullanici, islem_tipi, urun_adi, miktar, aciklama])
 
-# VERİ ÇEKME - TAM İZOLASYON (Sadece giriş yapan kişinin verileri çekilir)
+# VERİ ÇEKME - TAM İZOLASYON
 def verileri_getir(ws):
     kayitlar = ws.get_all_records()
     df = pd.DataFrame(kayitlar)
