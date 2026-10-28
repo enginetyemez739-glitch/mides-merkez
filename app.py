@@ -26,65 +26,49 @@ except:
     st.error("Gizli kasa (Secrets) ayarları bulunamadı!")
     st.stop()
 
-# --- GOOGLE SHEETS BAĞLANTISI ---
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds_dict = json.loads(google_json_str)
-creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-client = gspread.authorize(creds)
-
-try:
+# --- GOOGLE SHEETS BAĞLANTISI (ÖNBELLEKLİ - HIZ LİMİTİ KORUMASI) ---
+@st.cache_resource(ttl=600)
+def google_baglantisini_kur():
+    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    creds_dict = json.loads(google_json_str)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    client = gspread.authorize(creds)
+    
     sheet = client.open('MİDES - Gıda Deposu')
     kullanici_tablosu = client.open("MİDES - Kullanıcılar").get_worksheet(0)
+    
+    mevcut_sekmeler = {ws.title: ws for ws in sheet.worksheets()}
+    
+    def get_or_create_ws(baslik, cols="20"):
+        if baslik in mevcut_sekmeler:
+            return mevcut_sekmeler[baslik]
+        else:
+            return sheet.add_worksheet(title=baslik, rows="1000", cols=cols)
+
+    w_gida = get_or_create_ws("gida_deposu")
+    w_temizlik = get_or_create_ws("temizlik_deposu")
+    w_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
+    w_geri = get_or_create_ws("Geri_Bildirimler", cols="10")
+    
+    # Başlıkları sadece eksikse ekle
+    if not w_gida.row_values(1): w_gida.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
+    if not w_temizlik.row_values(1): w_temizlik.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
+    if not w_hareket.row_values(1): w_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
+    if not w_geri.row_values(1): w_geri.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj", "Firma"])
+    
+    return client, sheet, kullanici_tablosu, w_gida, w_temizlik, w_hareket, w_geri
+
+try:
+    client, sheet, kullanici_tablosu, ws_gida, ws_temizlik, ws_hareket, ws_geri_bildirim = google_baglantisini_kur()
     df_kullanicilar = pd.DataFrame(kullanici_tablosu.get_all_records())
-except:
-    st.error("Google Drive'da gerekli tablolar bulunamadı. 'MİDES - Kullanıcılar' ve 'MİDES - Gıda Deposu' tablolarını kontrol edin.")
+except Exception as e:
+    st.error("Google sistemi anlık olarak çok fazla istek aldı. Lütfen 1 dakika bekleyip sayfayı yenileyin.")
     st.stop()
-
-# --- BAŞLIK KONTROLÜ (Artık 'Depo Sahibi' yerine 'Firma' bazlı çalışıyoruz) ---
-def baslik_kontrol(ws):
-    headers = ws.row_values(1)
-    if not headers:
-        ws.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
-    else:
-        if "Alım Türü" not in headers:
-            ws.update_cell(1, 12, "Alım Türü")
-            ws.update_cell(1, 13, "Sözleşme No")
-            ws.update_cell(1, 14, "Sözleşme Tarihi")
-            ws.update_cell(1, 15, "Sözleşme Bitiş Tarihi")
-        if "Sözleşme Kritik" not in ws.row_values(1):
-            ws.update_cell(1, 16, "Sözleşme Kritik")
-        # Eski 'Depo Sahibi' varsa bile artık 'Firma' sütununu arayacağız
-        if "Firma" not in ws.row_values(1) and "Depo Sahibi" not in ws.row_values(1):
-            ws.update_cell(1, 17, "Firma")
-
-# GOOGLE API HIZ LİMİTİ KORUMASI (Tek Seferde Yükleme)
-mevcut_sekmeler = {ws.title: ws for ws in sheet.worksheets()}
-
-def get_or_create_ws(baslik, cols="20"):
-    if baslik in mevcut_sekmeler:
-        return mevcut_sekmeler[baslik]
-    else:
-        return sheet.add_worksheet(title=baslik, rows="1000", cols=cols)
-
-ws_gida = get_or_create_ws("gida_deposu")
-baslik_kontrol(ws_gida)
-
-ws_temizlik = get_or_create_ws("temizlik_deposu")
-baslik_kontrol(ws_temizlik)
-
-ws_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
-if not ws_hareket.row_values(1):
-    ws_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
-
-ws_geri_bildirim = get_or_create_ws("Geri_Bildirimler", cols="10")
-if not ws_geri_bildirim.row_values(1):
-    ws_geri_bildirim.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj", "Firma"])
 
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     mevcut_id = len(ws_hareket.get_all_values())
     firma_adi = st.session_state.get('firma', 'Bilinmiyor')
-    # Hareket geçmişine 8. sütun olarak Firma'yı ekliyoruz
     satir = [mevcut_id, zaman, kullanici, islem_tipi, urun_adi, miktar, aciklama, firma_adi]
     
     headers = ws_hareket.row_values(1)
@@ -92,13 +76,11 @@ def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     
     ws_hareket.append_row(satir)
 
-# VERİ ÇEKME - FİRMA BAZLI İZOLASYON
 def verileri_getir(ws):
     kayitlar = ws.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
         df['GS_Row'] = df.index + 2
-        # Firma sütunu varsa ona göre filtrele, yoksa eski Depo Sahibi sütununa göre filtrele
         filtre_sutunu = 'Firma' if 'Firma' in df.columns else 'Depo Sahibi' if 'Depo Sahibi' in df.columns else None
         
         if filtre_sutunu and st.session_state['rol'] != 'admin':
@@ -111,7 +93,6 @@ def hareketleri_getir():
     kayitlar = ws_hareket.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
-        # Personel sadece KENDİ FİRMASININ geçmişini görebilir (Firma'daki diğer çalışanların yaptıklarını da görür)
         if st.session_state['rol'] != 'admin':
             if 'Firma' in df.columns:
                 df = df[df['Firma'].astype(str) == st.session_state['firma']]
@@ -200,7 +181,7 @@ if not st.session_state['giris_yapildi']:
                     yetki = str(kullanici['Yetki'].values[0]).strip().lower()
                     if yetki in ["gida", "gıda", "temizlik", "yonetici", "yönetici"]:
                         st.session_state['kullanici'] = kadi_input
-                        # Firmasını alıyoruz (Yoksa kendi adını firma kabul eder)
+                        
                         firma = str(kullanici['Firma'].values[0]).strip() if 'Firma' in kullanici else kadi_input
                         st.session_state['firma'] = firma if firma and firma.lower() != "nan" else kadi_input
                         
@@ -364,7 +345,6 @@ else:
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
                 s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
                 
-                # Kişi yerine direk ait olduğu FİRMAYI yazdırıyoruz
                 sahip_firma = st.session_state['firma']
 
                 yeni_satir = [y_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt, sahip_firma]
@@ -374,6 +354,8 @@ else:
                 
                 log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
                 st.success(f"✅ Ürün {sahip_firma} deposuna başarıyla kaydedildi!")
+                # Önbelleği temizle ki yeni veri anında görünsün
+                st.cache_resource.clear()
                 st.rerun()
             else:
                 st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
@@ -412,6 +394,7 @@ else:
                     if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
                     if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
                     st.success("Güncellendi!")
+                    st.cache_resource.clear()
                     st.rerun()
                     
                 if sil_tik:
@@ -419,6 +402,7 @@ else:
                     aktif_ws.delete_rows(satir)
                     log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün depodan tamamen kaldırıldı")
                     st.success(f"🗑️ Ürün depodan silindi!")
+                    st.cache_resource.clear()
                     st.rerun()
 
     with sekme6:
@@ -448,6 +432,7 @@ else:
                             if m_dus > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", eslesen.iloc[0]['Ürün Adı'], m_dus, "Hızlı İşlem")
                             if m_ekle > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", eslesen.iloc[0]['Ürün Adı'], m_ekle, "Hızlı İşlem")
                             st.success("Stok güncellendi!")
+                            st.cache_resource.clear()
                             st.rerun()
             else: st.error("❌ Ürün deponuzda bulunamadı.")
 
@@ -506,13 +491,9 @@ else:
             if st.form_submit_button("Gönder", use_container_width=True) and mesaj.strip():
                 zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 firma = st.session_state.get('firma', 'Bilinmiyor')
-                
-                # Geri bildirim sekmesine Firma da yazılıyor
                 satir = [len(ws_geri_bildirim.get_all_values()), zaman, st.session_state['kullanici'], tur, mesaj, firma]
-                
                 headers = ws_geri_bildirim.row_values(1)
                 if "Firma" not in headers: ws_geri_bildirim.update_cell(1, 6, "Firma")
-                
                 ws_geri_bildirim.append_row(satir)
                 st.success("İletildi!")
 
@@ -538,7 +519,6 @@ else:
                 with c_h2:
                     y_yetki = st.selectbox("Vereceğiniz Yetki", ["Gida", "Temizlik", "Yonetici"])
                 with c_h3:
-                    # Yeni Firma Ekleme Kutusu
                     y_firma = st.text_input("Bağlı Olduğu Firma (Örn: X Birliği)")
                 
                 if st.form_submit_button("Yeni Kullanıcı Hesabı Oluştur", type="primary"):
@@ -559,6 +539,7 @@ else:
                         
                         kullanici_tablosu.append_row(yeni_h_satir)
                         st.success(f"Tebrikler! '{y_kadi}' kullanıcısı '{y_firma}' firmasına '{y_yetki}' yetkisiyle başarıyla eklendi.")
+                        st.cache_resource.clear()
                         st.rerun()
                     else:
                         st.error("Kullanıcı Adı, Şifre ve Bağlı Olduğu Firma alanları boş bırakılamaz.")
