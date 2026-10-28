@@ -50,7 +50,6 @@ def google_baglantisini_kur():
     w_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
     w_geri = get_or_create_ws("Geri_Bildirimler", cols="10")
     
-    # Başlıkları sadece eksikse ekle
     if not w_gida.row_values(1): w_gida.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
     if not w_temizlik.row_values(1): w_temizlik.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
     if not w_hareket.row_values(1): w_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
@@ -83,6 +82,7 @@ def verileri_getir(ws):
         df['GS_Row'] = df.index + 2
         filtre_sutunu = 'Firma' if 'Firma' in df.columns else 'Depo Sahibi' if 'Depo Sahibi' in df.columns else None
         
+        # Yönetici değilse, sadece kendi firmasının ürünlerini görsün
         if filtre_sutunu and st.session_state['rol'] != 'admin':
             df = df[df[filtre_sutunu].astype(str) == st.session_state['firma']]
     else:
@@ -93,6 +93,7 @@ def hareketleri_getir():
     kayitlar = ws_hareket.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
+        # Yönetici değilse, sadece kendi firmasının hareket geçmişini görsün
         if st.session_state['rol'] != 'admin':
             if 'Firma' in df.columns:
                 df = df[df['Firma'].astype(str) == st.session_state['firma']]
@@ -179,13 +180,13 @@ if not st.session_state['giris_yapildi']:
                 
                 if not kullanici.empty:
                     yetki = str(kullanici['Yetki'].values[0]).strip().lower()
-                    if yetki in ["gida", "gıda", "temizlik", "yonetici", "yönetici"]:
+                    if yetki in ["gida", "gıda", "temizlik", "yonetici", "yönetici", "merkez yönetici"]:
                         st.session_state['kullanici'] = kadi_input
                         
                         firma = str(kullanici['Firma'].values[0]).strip() if 'Firma' in kullanici else kadi_input
                         st.session_state['firma'] = firma if firma and firma.lower() != "nan" else kadi_input
                         
-                        if yetki in ["yonetici", "yönetici"]:
+                        if yetki in ["yonetici", "yönetici", "merkez yönetici"]:
                             st.session_state['rol'] = "admin"
                         elif yetki in ["gida", "gıda"]:
                             st.session_state['rol'] = "gida"
@@ -216,7 +217,7 @@ if not st.session_state['giris_yapildi']:
 else:
     # --- YÖNETİCİ DEPO SEÇİMİ ---
     if st.session_state['rol'] == 'admin':
-        st.info("👑 **Yönetici Modu:** Kendi firma/birim alanınızda işlemlerinizi yürütebilirsiniz.")
+        st.info("👑 **Merkezi Yönetici Modu:** Kendi firmanız adına işlemlerinizi yürütebilirsiniz.")
         secilen_depo = st.selectbox("Aktif Depo", ["🍎 Gıda Deposu", "🧹 Temizlik Deposu"])
         aktif_ws = ws_gida if "Gıda" in secilen_depo else ws_temizlik
         depo_adi = "Gıda Deposu" if "Gıda" in secilen_depo else "Temizlik Deposu"
@@ -234,7 +235,7 @@ else:
     c_ust1, c_ust2 = st.columns([4, 1])
     with c_ust1: st.title(f"📦 {st.session_state['firma']} - {depo_adi}")
     with c_ust2:
-        st.write(f"👤 {st.session_state['kullanici']} ({'Yönetici' if st.session_state['rol'] == 'admin' else 'Yetkili'})")
+        st.write(f"👤 {st.session_state['kullanici']} ({'Merkez Yönetici' if st.session_state['rol'] == 'admin' else 'Firma Yetkilisi'})")
         if st.button("🔄 Şifre Değiştir"):
             st.session_state['sifre_degistirme_modu'] = True
             st.rerun()
@@ -243,9 +244,10 @@ else:
             st.rerun()
 
     if st.session_state['rol'] == 'admin':
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi"])
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi"])
     else:
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim"])
+        # Personel de Güncelle/Sil ve Sözleşmeler sekmelerini tam yetkiyle görüyor. (Kullanıcı Yönetimi sekmesi onlarda yok)
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim"])
 
     with sekme1:
         st.markdown(f"### 📋 Uyarılar")
@@ -354,7 +356,6 @@ else:
                 
                 log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
                 st.success(f"✅ Ürün {sahip_firma} deposuna başarıyla kaydedildi!")
-                # Önbelleği temizle ki yeni veri anında görünsün
                 st.cache_resource.clear()
                 st.rerun()
             else:
@@ -382,6 +383,8 @@ else:
                 
                 c_btn1, c_btn2 = st.columns(2)
                 kaydet_tik = c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary")
+                
+                # Personel de yönetici de artık sadece KENDİ firmasının ürününü silebilir.
                 sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
                 
                 if kaydet_tik:
@@ -509,7 +512,7 @@ else:
     if st.session_state['rol'] == 'admin':
         with sekme9:
             st.subheader("👥 Yeni Müşteri / Personel Hesabı Aç")
-            st.info("Buradan yeni kullanıcılara sıfırdan hesap açabilir veya onları var olan bir firmaya/bölüme dahil edebilirsiniz.")
+            st.info("Sadece Merkezi Yönetici yetkinizle yeni hesaplar açabilirsiniz.")
             
             with st.form("yeni_hesap"):
                 c_h1, c_h2, c_h3 = st.columns(3)
