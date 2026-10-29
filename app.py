@@ -49,16 +49,18 @@ def google_baglantisini_kur():
     w_temizlik = get_or_create_ws("temizlik_deposu")
     w_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
     w_geri = get_or_create_ws("Geri_Bildirimler", cols="10")
+    w_duyuru = get_or_create_ws("Duyurular", cols="2") # Yeni Duyuru Sekmesi
     
     if not w_gida.row_values(1): w_gida.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
     if not w_temizlik.row_values(1): w_temizlik.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
     if not w_hareket.row_values(1): w_hareket.append_row(["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
     if not w_geri.row_values(1): w_geri.append_row(["ID", "Tarih", "Kullanıcı", "Tür", "Mesaj", "Firma"])
+    if not w_duyuru.row_values(1): w_duyuru.append_row(["Mesaj", "Aktif"])
     
-    return client, sheet, kullanici_tablosu, w_gida, w_temizlik, w_hareket, w_geri
+    return client, sheet, kullanici_tablosu, w_gida, w_temizlik, w_hareket, w_geri, w_duyuru
 
 try:
-    client, sheet, kullanici_tablosu, ws_gida, ws_temizlik, ws_hareket, ws_geri_bildirim = google_baglantisini_kur()
+    client, sheet, kullanici_tablosu, ws_gida, ws_temizlik, ws_hareket, ws_geri_bildirim, ws_duyuru = google_baglantisini_kur()
     df_kullanicilar = pd.DataFrame(kullanici_tablosu.get_all_records())
 except Exception as e:
     st.error("Google sistemi anlık olarak çok fazla istek aldı. Lütfen 1 dakika bekleyip sayfayı yenileyin.")
@@ -93,7 +95,6 @@ def hareketleri_getir():
     kayitlar = ws_hareket.get_all_records()
     df = pd.DataFrame(kayitlar)
     if not df.empty:
-        # Yönetici değilse, sadece kendi firmasının hareket geçmişini görsün
         if st.session_state['rol'] != 'admin':
             if 'Firma' in df.columns:
                 df = df[df['Firma'].astype(str) == st.session_state['firma']]
@@ -243,10 +244,20 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
+    # --- SİSTEM DUYURUSU KONTROLÜ (Giriş yapan herkes görür) ---
+    try:
+        duyuru_kayitlari = ws_duyuru.get_all_records()
+        if duyuru_kayitlari:
+            aktif_duyuru = str(duyuru_kayitlari[0].get('Aktif', 'Hayır'))
+            duyuru_mesaji = str(duyuru_kayitlari[0].get('Mesaj', ''))
+            if aktif_duyuru == 'Evet' and duyuru_mesaji.strip():
+                st.warning(f"📢 **SİSTEM DUYURUSU:** {duyuru_mesaji}")
+    except:
+        pass
+
     if st.session_state['rol'] == 'admin':
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi"])
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru Yayınla"])
     else:
-        # Personel de Güncelle/Sil ve Sözleşmeler sekmelerini tam yetkiyle görüyor. (Kullanıcı Yönetimi sekmesi onlarda yok)
         sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim"])
 
     with sekme1:
@@ -383,8 +394,6 @@ else:
                 
                 c_btn1, c_btn2 = st.columns(2)
                 kaydet_tik = c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary")
-                
-                # Personel de yönetici de artık sadece KENDİ firmasının ürününü silebilir.
                 sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
                 
                 if kaydet_tik:
@@ -408,12 +417,9 @@ else:
                     st.cache_resource.clear()
                     st.rerun()
 
-    # --- KAMERA GİZLİLİK GÜNCELLEMESİ YAPILAN BÖLÜM ---
     with sekme6:
         st.subheader("⚡ Hızlı İşlem (Barkod ile)")
         aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
-        
-        # Kamera varsayılan olarak kapalı, kullanıcı kutucuğu işaretleyince açılır
         kamera_ac = st.checkbox("📷 QR Okutmak İçin Kamerayı Aç")
         resim = None
         
@@ -554,3 +560,37 @@ else:
                         st.rerun()
                     else:
                         st.error("Kullanıcı Adı, Şifre ve Bağlı Olduğu Firma alanları boş bırakılamaz.")
+                        
+        # --- YENİ DUYURU YÖNETİM MERKEZİ ---
+        with sekme10:
+            st.subheader("📢 Sistem İçi Duyuru Yayınla")
+            st.info("Buraya yazdığınız mesaj, sisteme giriş yapan tüm kullanıcıların (diğer firmalar dahil) ekranının en üstünde dikkat çekici bir uyarı bandı olarak görünür.")
+            
+            mevcut_mesaj = ""
+            mevcut_aktif_mi = False
+            try:
+                dk = ws_duyuru.get_all_records()
+                if dk:
+                    mevcut_mesaj = str(dk[0].get('Mesaj', ''))
+                    mevcut_aktif_mi = str(dk[0].get('Aktif', 'Hayır')) == 'Evet'
+            except:
+                pass
+            
+            with st.form("duyuru_formu"):
+                d_mesaj = st.text_area("Duyuru Mesajınız (Örn: 14:00 - 15:00 arası güncelleme çalışması yapılacaktır):", value=mevcut_mesaj)
+                d_aktif = st.checkbox("Duyuruyu Aktif Et (Herkes görsün)", value=mevcut_aktif_mi)
+                
+                if st.form_submit_button("Duyuruyu Kaydet / Güncelle", type="primary"):
+                    if not ws_duyuru.row_values(1): ws_duyuru.append_row(["Mesaj", "Aktif"])
+                    
+                    yeni_durum = "Evet" if d_aktif else "Hayır"
+                    
+                    if len(ws_duyuru.get_all_values()) < 2:
+                        ws_duyuru.append_row([d_mesaj, yeni_durum])
+                    else:
+                        ws_duyuru.update_cell(2, 1, d_mesaj)
+                        ws_duyuru.update_cell(2, 2, yeni_durum)
+                    
+                    st.success("Duyuru ayarları başarıyla güncellendi!")
+                    st.cache_resource.clear()
+                    st.rerun()
