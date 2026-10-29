@@ -408,10 +408,18 @@ else:
                     st.cache_resource.clear()
                     st.rerun()
 
+    # --- KAMERA GİZLİLİK GÜNCELLEMESİ YAPILAN BÖLÜM ---
     with sekme6:
         st.subheader("⚡ Hızlı İşlem (Barkod ile)")
         aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
-        resim = st.camera_input("📷 Veya QR Okut")
+        
+        # Kamera varsayılan olarak kapalı, kullanıcı kutucuğu işaretleyince açılır
+        kamera_ac = st.checkbox("📷 QR Okutmak İçin Kamerayı Aç")
+        resim = None
+        
+        if kamera_ac:
+            resim = st.camera_input("QR Kodu Kameraya Gösterin")
+            
         bulunan = str(aranan_stok).strip() if aranan_stok else None
         
         if resim:
