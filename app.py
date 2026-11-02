@@ -49,7 +49,7 @@ def google_baglantisini_kur():
     w_temizlik = get_or_create_ws("temizlik_deposu")
     w_hareket = get_or_create_ws("Hareket_Gecmisi", cols="10")
     w_geri = get_or_create_ws("Geri_Bildirimler", cols="10")
-    w_duyuru = get_or_create_ws("Duyurular", cols="2") # Yeni Duyuru Sekmesi
+    w_duyuru = get_or_create_ws("Duyurular", cols="2") 
     
     if not w_gida.row_values(1): w_gida.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
     if not w_temizlik.row_values(1): w_temizlik.append_row(["ID", "Stok No", "Ürün Adı", "Miktar", "Birim", "Eklenme Tarihi", "SKT", "Üretim Tarihi", "Giriş Tarihi", "Resim Yolu", "Kritik Stok", "Alım Türü", "Sözleşme No", "Sözleşme Tarihi", "Sözleşme Bitiş Tarihi", "Sözleşme Kritik", "Firma"])
@@ -84,7 +84,6 @@ def verileri_getir(ws):
         df['GS_Row'] = df.index + 2
         filtre_sutunu = 'Firma' if 'Firma' in df.columns else 'Depo Sahibi' if 'Depo Sahibi' in df.columns else None
         
-        # Yönetici değilse, sadece kendi firmasının ürünlerini görsün
         if filtre_sutunu and st.session_state['rol'] != 'admin':
             df = df[df[filtre_sutunu].astype(str) == st.session_state['firma']]
     else:
@@ -216,7 +215,6 @@ if not st.session_state['giris_yapildi']:
             else:
                 st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
-    # --- YÖNETİCİ DEPO SEÇİMİ ---
     if st.session_state['rol'] == 'admin':
         st.info("👑 **Merkezi Yönetici Modu:** Kendi firmanız adına işlemlerinizi yürütebilirsiniz.")
         secilen_depo = st.selectbox("Aktif Depo", ["🍎 Gıda Deposu", "🧹 Temizlik Deposu"])
@@ -244,7 +242,6 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    # --- SİSTEM DUYURUSU KONTROLÜ (Giriş yapan herkes görür) ---
     try:
         duyuru_kayitlari = ws_duyuru.get_all_records()
         if duyuru_kayitlari:
@@ -256,7 +253,7 @@ else:
         pass
 
     if st.session_state['rol'] == 'admin':
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru Yayınla"])
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru Yayınla"])
     else:
         sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim"])
 
@@ -322,6 +319,26 @@ else:
         st.markdown("### 🔍 Detaylı Parti Listesi")
         gosterilecek_df = df.drop(columns=['Resim Yolu', 'Miktar_Sayi', 'GS_Row', 'Depo Sahibi', 'Firma'], errors='ignore')
         st.dataframe(gosterilecek_df, use_container_width=True, hide_index=True)
+
+        # --- YENİ EKLENEN PERFORMANS VE AKTİFLİK ANALİZİ (Sadece Yöneticiler İçin) ---
+        if st.session_state['rol'] == 'admin':
+            st.divider()
+            st.markdown("### 📈 Firma Aktiflik ve Performans Analizi")
+            df_perf = hareketleri_getir()
+            if not df_perf.empty and 'Firma' in df_perf.columns:
+                c_g1, c_g2 = st.columns(2)
+                with c_g1:
+                    st.markdown("**Firmalara Göre Toplam İşlem Hacmi (Grafik)**")
+                    islem_sayilari = df_perf['Firma'].value_counts()
+                    st.bar_chart(islem_sayilari)
+                with c_g2:
+                    st.markdown("**Firmaların Son Görülme Zamanları**")
+                    son_gorme = df_perf.groupby('Firma')['Tarih'].max().reset_index()
+                    son_gorme.columns = ['Firma', 'Son İşlem Tarihi']
+                    son_gorme = son_gorme.sort_values('Son İşlem Tarihi', ascending=False)
+                    st.dataframe(son_gorme, use_container_width=True, hide_index=True)
+            else:
+                st.info("Performans grafiği için henüz yeterli hareket verisi yok.")
 
     with sekme2:
         st.subheader("Depoya Yeni Ürün Ekle")
@@ -561,10 +578,9 @@ else:
                     else:
                         st.error("Kullanıcı Adı, Şifre ve Bağlı Olduğu Firma alanları boş bırakılamaz.")
                         
-        # --- YENİ DUYURU YÖNETİM MERKEZİ ---
         with sekme10:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
-            st.info("Buraya yazdığınız mesaj, sisteme giriş yapan tüm kullanıcıların (diğer firmalar dahil) ekranının en üstünde dikkat çekici bir uyarı bandı olarak görünür.")
+            st.info("Buraya yazdığınız mesaj, sisteme giriş yapan tüm kullanıcıların ekranının en üstünde dikkat çekici bir uyarı bandı olarak görünür.")
             
             mevcut_mesaj = ""
             mevcut_aktif_mi = False
@@ -577,20 +593,17 @@ else:
                 pass
             
             with st.form("duyuru_formu"):
-                d_mesaj = st.text_area("Duyuru Mesajınız (Örn: 14:00 - 15:00 arası güncelleme çalışması yapılacaktır):", value=mevcut_mesaj)
+                d_mesaj = st.text_area("Duyuru Mesajınız:", value=mevcut_mesaj)
                 d_aktif = st.checkbox("Duyuruyu Aktif Et (Herkes görsün)", value=mevcut_aktif_mi)
                 
                 if st.form_submit_button("Duyuruyu Kaydet / Güncelle", type="primary"):
                     if not ws_duyuru.row_values(1): ws_duyuru.append_row(["Mesaj", "Aktif"])
-                    
                     yeni_durum = "Evet" if d_aktif else "Hayır"
-                    
                     if len(ws_duyuru.get_all_values()) < 2:
                         ws_duyuru.append_row([d_mesaj, yeni_durum])
                     else:
                         ws_duyuru.update_cell(2, 1, d_mesaj)
                         ws_duyuru.update_cell(2, 2, yeni_durum)
-                    
                     st.success("Duyuru ayarları başarıyla güncellendi!")
                     st.cache_resource.clear()
                     st.rerun()
