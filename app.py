@@ -590,10 +590,10 @@ else:
                     st.cache_resource.clear()
                     st.rerun()
 
-    # --- YEPYENİ EXCEL/CSV TOPLU ÇIKIŞ MODÜLÜ ---
+    # --- DÜZENLENEBİLİR EXCEL/CSV TOPLU ÇIKIŞ MODÜLÜ ---
     with sekme11:
         st.subheader("📂 Excel/CSV ile Toplu Çıkış İşlemi")
-        st.info("Telefonunuzdaki tarayıcı uygulamaları (CamScanner vb.) ile oluşturduğunuz Excel veya CSV listesini buraya yükleyin. Sistem hız limitine takılmadan tek seferde (paket halinde) düşüm yapacaktır.")
+        st.info("Telefonunuzdaki tarayıcı uygulamaları (CamScanner vb.) ile oluşturduğunuz Excel veya CSV listesini buraya yükleyin. Hatalı rakamlar varsa tabloda düzeltebilirsiniz.")
         
         yuklenen_dosya = st.file_uploader("Çıkış Yapılacak Dosyayı Yükleyin", type=['xlsx', 'xls', 'csv'])
         
@@ -629,7 +629,7 @@ else:
                                 urun_adi = eslesen.iloc[0]['Ürün Adı']
                                 gs_row = int(eslesen.iloc[0]['GS_Row'])
                                 kalan = mevcut_miktar - dusulecek
-                                durum = "✅ Uygun" if kalan >= 0 else "⚠️ Stok Yetersiz"
+                                durum = "✅ Uygun" if kalan >= 0 else "⚠️ Yetersiz"
                                 
                                 onay_listesi.append({
                                     'Stok No': aranan_stok,
@@ -644,21 +644,35 @@ else:
                                 hatalar.append(f"❌ '{aranan_stok}' stok numaralı ürün deponuzda bulunamadı.")
                                 
                     if onay_listesi:
-                        st.markdown("### 🔍 İşlem Önizlemesi ve Kontrol Tablosu")
-                        df_onay = pd.DataFrame(onay_listesi)
-                        st.dataframe(df_onay.drop(columns=['GS_Row']), use_container_width=True)
+                        st.markdown("### 🔍 İşlem Önizlemesi ve Düzenleme Tablosu")
                         
                         if hatalar:
                             with st.expander("⚠️ Bulunamayan / Eşleşmeyen Ürünler (Tıklayıp Görün)"):
                                 for h in hatalar: st.write(h)
-                                
-                        yetersizler = df_onay[df_onay['Kalan Stok'] < 0]
-                        if not yetersizler.empty:
-                            st.error("⚠️ DİKKAT: Bazı ürünlerin stoğu yetersiz! İşlemi onaylarsanız stok eksi (-) değere düşecektir.")
-                            
+
+                        df_onay = pd.DataFrame(onay_listesi)
+                        
                         with st.form("toplu_onay_formu"):
-                            st.info(f"Toplam {len(onay_listesi)} kalem üründe düşüm yapılacaktır. İşlem hız limitini aşmadan (Batch Update) tek bir paket olarak veritabanına iletilecektir.")
-                            if st.form_submit_button("💾 Toplu Çıkışı Onayla ve Kaydet", type="primary"):
+                            st.info("💡 **MİKTARI DEĞİŞTİRME:** Tarayıcının yanlış okuduğu rakamlar varsa, aşağıdaki tabloda **'✏️ Çıkış Miktarı'** sütununa iki kez tıklayarak doğru rakamı yazabilirsiniz.")
+                            
+                            # Hatalı girişlere karşı düzenlenebilir (Data Editor) tablo
+                            duzenlenmis_df = st.data_editor(
+                                df_onay,
+                                column_config={
+                                    "Çıkış Miktarı": st.column_config.NumberColumn(
+                                        "✏️ Çıkış Miktarı (Düzenle)",
+                                        min_value=0.0,
+                                        step=1.0,
+                                        required=True
+                                    ),
+                                    "GS_Row": None # Teknik ID sütununu gizle, ama arka planda koru
+                                },
+                                disabled=["Stok No", "Ürün Adı", "Mevcut Stok", "Kalan Stok", "Durum"],
+                                hide_index=True,
+                                use_container_width=True
+                            )
+                            
+                            if st.form_submit_button("💾 Düzeltmeleri Kabul Et ve Toplu Çıkışı Onayla", type="primary"):
                                 g_updates = []
                                 log_satirlari = []
                                 zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -666,22 +680,28 @@ else:
                                 firma_adi = st.session_state.get('firma', 'Bilinmiyor')
                                 k_adi = st.session_state['kullanici']
                                 
-                                for i, item in enumerate(onay_listesi):
-                                    g_updates.append({'range': f"D{item['GS_Row']}", 'values': [[item['Kalan Stok']]]})
-                                    log_satirlari.append([
-                                        mevcut_id + i, zaman, k_adi, "ÇIKIŞ", item['Ürün Adı'], 
-                                        item['Çıkış Miktarı'], "Excel ile Toplu Çıkış", firma_adi
-                                    ])
+                                # Doğrudan ekranda düzenlenmiş DataFrame üzerinden okuyoruz
+                                for i, row_data in duzenlenmis_df.iterrows():
+                                    guncel_cikis = float(row_data['Çıkış Miktarı'])
+                                    mevcut = float(row_data['Mevcut Stok'])
+                                    kalan_son = mevcut - guncel_cikis
+                                    
+                                    if guncel_cikis > 0:
+                                        g_updates.append({'range': f"D{row_data['GS_Row']}", 'values': [[kalan_son]]})
+                                        log_satirlari.append([
+                                            mevcut_id + i, zaman, k_adi, "ÇIKIŞ", row_data['Ürün Adı'], 
+                                            guncel_cikis, "Excel ile Toplu Çıkış", firma_adi
+                                        ])
                                 
-                                # Google API Batch Update (Sistemi yormayan tek seferlik paket gönderimi)
-                                aktif_ws.batch_update(g_updates)
-                                ws_hareket.append_rows(log_satirlari)
-                                
-                                st.success("✅ Harika! Tüm liste saniyeler içinde hatasız olarak düşüldü ve geçmişe kaydedildi.")
-                                st.cache_resource.clear()
-                                st.rerun()
+                                if g_updates:
+                                    aktif_ws.batch_update(g_updates)
+                                    ws_hareket.append_rows(log_satirlari)
+                                    st.success("✅ Harika! Tüm liste düzeltilmiş rakamlarla hatasız olarak düşüldü ve geçmişe kaydedildi.")
+                                    st.cache_resource.clear()
+                                    st.rerun()
+                                else:
+                                    st.warning("Düşülecek herhangi bir ürün kalmadı.")
                     else:
                         st.warning("Yüklenen listede düşülecek miktar bulunamadı veya stok numaraları sistemle eşleşmedi.")
             except Exception as e:
                 st.error(f"Dosya okuma veya işleme hatası oluştu: {e}")
-                st.info("💡 İpucu: Excel yüklerken hata alıyorsanız, lütfen GitHub deponuzdaki 'requirements.txt' dosyanızın içinde 'openpyxl' yazılı olduğundan emin olun.")
