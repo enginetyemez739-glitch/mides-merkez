@@ -253,9 +253,9 @@ else:
         pass
 
     if st.session_state['rol'] == 'admin':
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru Yayınla"])
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10, sekme11 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru", "📂 Toplu Çıkış"])
     else:
-        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim"])
+        sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme11 = st.tabs(["📊 Özet", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Depo Geçmişi", "📑 Sözleşmeler", "💬 Geri Bildirim", "📂 Toplu Çıkış"])
 
     with sekme1:
         st.markdown(f"### 📋 Uyarılar")
@@ -320,7 +320,6 @@ else:
         gosterilecek_df = df.drop(columns=['Resim Yolu', 'Miktar_Sayi', 'GS_Row', 'Depo Sahibi', 'Firma'], errors='ignore')
         st.dataframe(gosterilecek_df, use_container_width=True, hide_index=True)
 
-        # --- YENİ EKLENEN PERFORMANS VE AKTİFLİK ANALİZİ (Sadece Yöneticiler İçin) ---
         if st.session_state['rol'] == 'admin':
             st.divider()
             st.markdown("### 📈 Firma Aktiflik ve Performans Analizi")
@@ -344,44 +343,35 @@ else:
         st.subheader("Depoya Yeni Ürün Ekle")
         with st.form("urun_ekle_formu"):
             col1, col2 = st.columns(2)
-        
         with col1:
             stok_no = st.text_input("Stok Numarası (Barkod)")
             urun_adi = st.text_input("Ürün Adı")
             miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
             birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket", "Koli"])
             alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
-            
         with col2:
             kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
             uretim_tarihi = st.date_input("Üretim Tarihi")
             skt = st.date_input("Son Kullanma Tarihi (SKT)")
-            
             st.markdown("---")
             sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
             sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
             sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
             sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
-            
             ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         
         if ekle_btn:
             if urun_adi and stok_no:
                 bugun_tarih = datetime.now().strftime("%Y-%m-%d")
                 y_id = 1 if aktif_ws.get_all_records() == [] else len(aktif_ws.get_all_records()) + 1
-                
                 s_no = sozlesme_no if alim_turu == "Piyasa Alımı" else "-"
                 s_tar = str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-"
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
                 s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
-                
                 sahip_firma = st.session_state['firma']
-
                 yeni_satir = [y_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt, sahip_firma]
-                
                 satir_tam = yeni_satir + [""] * max(0, len(aktif_ws.row_values(1)) - len(yeni_satir))
                 aktif_ws.append_row(satir_tam[:len(aktif_ws.row_values(1))])
-                
                 log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
                 st.success(f"✅ Ürün {sahip_firma} deposuna başarıyla kaydedildi!")
                 st.cache_resource.clear()
@@ -419,7 +409,6 @@ else:
                     aktif_ws.update_cell(satir, 4, urun_miktar - cikis + giris)  
                     aktif_ws.update_cell(satir, 7, y_skt.strftime('%Y-%m-%d')) 
                     aktif_ws.update_cell(satir, 11, y_kritik) 
-                    
                     if cikis > 0: log_kaydet(st.session_state['kullanici'], "ÇIKIŞ", urun['Ürün Adı'], cikis, "Manuel Güncelleme")
                     if giris > 0: log_kaydet(st.session_state['kullanici'], "GİRİŞ", urun['Ürün Adı'], giris, "Manuel Güncelleme")
                     st.success("Güncellendi!")
@@ -439,7 +428,6 @@ else:
         aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
         kamera_ac = st.checkbox("📷 QR Okutmak İçin Kamerayı Aç")
         resim = None
-        
         if kamera_ac:
             resim = st.camera_input("QR Kodu Kameraya Gösterin")
             
@@ -483,7 +471,6 @@ else:
             with c_kart2:
                 st.markdown("**Toplu QR Kod Çıktısı (A4)**")
                 st.info("Kendi deponuzdaki ürün barkodlarını A4 formatında yazdırmak için belgeyi indirin.")
-                
                 html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo Barkodları</h2><div class='grid'>"
                 for _, row in df.iterrows():
                     u_adi = str(row.get('Ürün Adı', ''))
@@ -492,7 +479,6 @@ else:
                     b64_qr = base64.b64encode(q_data).decode()
                     html_icerik += f"<div class='card'><div class='title'>{u_adi}</div><div class='stok'>Stok No: {s_no}</div><img src='data:image/png;base64,{b64_qr}'></div>"
                 html_icerik += "</div></body></html>"
-                
                 st.download_button(label="📄 Yazdırılabilir Belgeyi İndir", data=html_icerik, file_name="MIDES_Barkodlar.html", mime="text/html", use_container_width=True)
         else:
             st.info("Deponuzda henüz ürün bulunmuyor.")
@@ -544,7 +530,6 @@ else:
         with sekme9:
             st.subheader("👥 Yeni Müşteri / Personel Hesabı Aç")
             st.info("Sadece Merkezi Yönetici yetkinizle yeni hesaplar açabilirsiniz.")
-            
             with st.form("yeni_hesap"):
                 c_h1, c_h2, c_h3 = st.columns(3)
                 with c_h1:
@@ -563,7 +548,6 @@ else:
                             kullanici_tablosu.update_cell(1, len(k_headers), "Firma")
                             
                         yeni_h_satir = [""] * len(k_headers)
-                        
                         if "Kullanıcı Adı" in k_headers: yeni_h_satir[k_headers.index("Kullanıcı Adı")] = y_kadi
                         if "Şifre" in k_headers: yeni_h_satir[k_headers.index("Şifre")] = sifre_hashle(y_sifre)
                         if "Yetki" in k_headers: yeni_h_satir[k_headers.index("Yetki")] = y_yetki
@@ -581,7 +565,6 @@ else:
         with sekme10:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
             st.info("Buraya yazdığınız mesaj, sisteme giriş yapan tüm kullanıcıların ekranının en üstünde dikkat çekici bir uyarı bandı olarak görünür.")
-            
             mevcut_mesaj = ""
             mevcut_aktif_mi = False
             try:
@@ -589,8 +572,7 @@ else:
                 if dk:
                     mevcut_mesaj = str(dk[0].get('Mesaj', ''))
                     mevcut_aktif_mi = str(dk[0].get('Aktif', 'Hayır')) == 'Evet'
-            except:
-                pass
+            except: pass
             
             with st.form("duyuru_formu"):
                 d_mesaj = st.text_area("Duyuru Mesajınız:", value=mevcut_mesaj)
@@ -607,3 +589,99 @@ else:
                     st.success("Duyuru ayarları başarıyla güncellendi!")
                     st.cache_resource.clear()
                     st.rerun()
+
+    # --- YEPYENİ EXCEL/CSV TOPLU ÇIKIŞ MODÜLÜ ---
+    with sekme11:
+        st.subheader("📂 Excel/CSV ile Toplu Çıkış İşlemi")
+        st.info("Telefonunuzdaki tarayıcı uygulamaları (CamScanner vb.) ile oluşturduğunuz Excel veya CSV listesini buraya yükleyin. Sistem hız limitine takılmadan tek seferde (paket halinde) düşüm yapacaktır.")
+        
+        yuklenen_dosya = st.file_uploader("Çıkış Yapılacak Dosyayı Yükleyin", type=['xlsx', 'xls', 'csv'])
+        
+        if yuklenen_dosya:
+            try:
+                if yuklenen_dosya.name.endswith('.csv'):
+                    df_yuklenen = pd.read_csv(yuklenen_dosya)
+                else:
+                    df_yuklenen = pd.read_excel(yuklenen_dosya)
+                
+                st.success("✅ Dosya başarıyla okundu! Lütfen MİDES'in hangi sütunları baz alacağını seçin.")
+                
+                c1, c2 = st.columns(2)
+                stok_sutunu = c1.selectbox("Stok No (Barkod) Sütunu:", ["Seçiniz..."] + list(df_yuklenen.columns))
+                miktar_sutunu = c2.selectbox("Düşülecek Miktar Sütunu:", ["Seçiniz..."] + list(df_yuklenen.columns))
+                
+                if stok_sutunu != "Seçiniz..." and miktar_sutunu != "Seçiniz...":
+                    onay_listesi = []
+                    hatalar = []
+                    
+                    for idx, row in df_yuklenen.iterrows():
+                        aranan_stok = str(row[stok_sutunu]).strip()
+                        if aranan_stok == "nan" or not aranan_stok:
+                            continue
+                            
+                        try: dusulecek = float(row[miktar_sutunu])
+                        except: dusulecek = 0
+                        
+                        if dusulecek > 0:
+                            eslesen = df[df['Stok No'].astype(str).str.strip() == aranan_stok]
+                            if not eslesen.empty:
+                                mevcut_miktar = float(eslesen.iloc[0].get('Miktar', 0) or 0)
+                                urun_adi = eslesen.iloc[0]['Ürün Adı']
+                                gs_row = int(eslesen.iloc[0]['GS_Row'])
+                                kalan = mevcut_miktar - dusulecek
+                                durum = "✅ Uygun" if kalan >= 0 else "⚠️ Stok Yetersiz"
+                                
+                                onay_listesi.append({
+                                    'Stok No': aranan_stok,
+                                    'Ürün Adı': urun_adi,
+                                    'Mevcut Stok': mevcut_miktar,
+                                    'Çıkış Miktarı': dusulecek,
+                                    'Kalan Stok': kalan,
+                                    'Durum': durum,
+                                    'GS_Row': gs_row
+                                })
+                            else:
+                                hatalar.append(f"❌ '{aranan_stok}' stok numaralı ürün deponuzda bulunamadı.")
+                                
+                    if onay_listesi:
+                        st.markdown("### 🔍 İşlem Önizlemesi ve Kontrol Tablosu")
+                        df_onay = pd.DataFrame(onay_listesi)
+                        st.dataframe(df_onay.drop(columns=['GS_Row']), use_container_width=True)
+                        
+                        if hatalar:
+                            with st.expander("⚠️ Bulunamayan / Eşleşmeyen Ürünler (Tıklayıp Görün)"):
+                                for h in hatalar: st.write(h)
+                                
+                        yetersizler = df_onay[df_onay['Kalan Stok'] < 0]
+                        if not yetersizler.empty:
+                            st.error("⚠️ DİKKAT: Bazı ürünlerin stoğu yetersiz! İşlemi onaylarsanız stok eksi (-) değere düşecektir.")
+                            
+                        with st.form("toplu_onay_formu"):
+                            st.info(f"Toplam {len(onay_listesi)} kalem üründe düşüm yapılacaktır. İşlem hız limitini aşmadan (Batch Update) tek bir paket olarak veritabanına iletilecektir.")
+                            if st.form_submit_button("💾 Toplu Çıkışı Onayla ve Kaydet", type="primary"):
+                                g_updates = []
+                                log_satirlari = []
+                                zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                mevcut_id = len(ws_hareket.get_all_values())
+                                firma_adi = st.session_state.get('firma', 'Bilinmiyor')
+                                k_adi = st.session_state['kullanici']
+                                
+                                for i, item in enumerate(onay_listesi):
+                                    g_updates.append({'range': f"D{item['GS_Row']}", 'values': [[item['Kalan Stok']]]})
+                                    log_satirlari.append([
+                                        mevcut_id + i, zaman, k_adi, "ÇIKIŞ", item['Ürün Adı'], 
+                                        item['Çıkış Miktarı'], "Excel ile Toplu Çıkış", firma_adi
+                                    ])
+                                
+                                # Google API Batch Update (Sistemi yormayan tek seferlik paket gönderimi)
+                                aktif_ws.batch_update(g_updates)
+                                ws_hareket.append_rows(log_satirlari)
+                                
+                                st.success("✅ Harika! Tüm liste saniyeler içinde hatasız olarak düşüldü ve geçmişe kaydedildi.")
+                                st.cache_resource.clear()
+                                st.rerun()
+                    else:
+                        st.warning("Yüklenen listede düşülecek miktar bulunamadı veya stok numaraları sistemle eşleşmedi.")
+            except Exception as e:
+                st.error(f"Dosya okuma veya işleme hatası oluştu: {e}")
+                st.info("💡 İpucu: Excel yüklerken hata alıyorsanız, lütfen GitHub deponuzdaki 'requirements.txt' dosyanızın içinde 'openpyxl' yazılı olduğundan emin olun.")
