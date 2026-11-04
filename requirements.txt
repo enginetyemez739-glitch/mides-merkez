@@ -4,3 +4,4 @@ qrcode[pil]
 opencv-python-headless
 gspread
 google-auth
+openpyxl
