@@ -13,11 +13,27 @@ import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
 import base64
+import google.generativeai as genai
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
+
+# --- AKILLI RAKAM TEMİZLEYİCİ (VİRGÜL/NOKTA HATALARINI ÇÖZER) ---
+def rakam_temizle(deger):
+    try:
+        if pd.isna(deger) or str(deger).strip() == "": return 0.0
+        d_str = str(deger).upper().replace('KG', '').replace('LİTRE', '').replace('ADET', '').replace(' ', '').strip()
+        
+        if '.' in d_str and ',' in d_str:
+            d_str = d_str.replace('.', '').replace(',', '.')
+        elif ',' in d_str:
+            d_str = d_str.replace(',', '.')
+            
+        return float(d_str)
+    except:
+        return 0.0
 
 # --- GİZLİ KASA AYARLARI ---
 try:
@@ -40,10 +56,8 @@ def google_baglantisini_kur():
     mevcut_sekmeler = {ws.title: ws for ws in sheet.worksheets()}
     
     def get_or_create_ws(baslik, cols="20"):
-        if baslik in mevcut_sekmeler:
-            return mevcut_sekmeler[baslik]
-        else:
-            return sheet.add_worksheet(title=baslik, rows="1000", cols=cols)
+        if baslik in mevcut_sekmeler: return mevcut_sekmeler[baslik]
+        else: return sheet.add_worksheet(title=baslik, rows="1000", cols=cols)
 
     w_gida = get_or_create_ws("gida_deposu")
     w_temizlik = get_or_create_ws("temizlik_deposu")
@@ -71,10 +85,8 @@ def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     mevcut_id = len(ws_hareket.get_all_values())
     firma_adi = st.session_state.get('firma', 'Bilinmiyor')
     satir = [mevcut_id, zaman, kullanici, islem_tipi, urun_adi, miktar, aciklama, firma_adi]
-    
     headers = ws_hareket.row_values(1)
     if "Firma" not in headers: ws_hareket.update_cell(1, 8, "Firma")
-    
     ws_hareket.append_row(satir)
 
 def verileri_getir(ws):
@@ -83,7 +95,6 @@ def verileri_getir(ws):
     if not df.empty:
         df['GS_Row'] = df.index + 2
         filtre_sutunu = 'Firma' if 'Firma' in df.columns else 'Depo Sahibi' if 'Depo Sahibi' in df.columns else None
-        
         if filtre_sutunu and st.session_state['rol'] != 'admin':
             df = df[df[filtre_sutunu].astype(str) == st.session_state['firma']]
     else:
@@ -95,10 +106,8 @@ def hareketleri_getir():
     df = pd.DataFrame(kayitlar)
     if not df.empty:
         if st.session_state['rol'] != 'admin':
-            if 'Firma' in df.columns:
-                df = df[df['Firma'].astype(str) == st.session_state['firma']]
-            else:
-                df = df[df['Kullanıcı'].astype(str) == st.session_state['kullanici']]
+            if 'Firma' in df.columns: df = df[df['Firma'].astype(str) == st.session_state['firma']]
+            else: df = df[df['Kullanıcı'].astype(str) == st.session_state['kullanici']]
         return df.sort_values(by="ID", ascending=False)
     return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
 
@@ -130,10 +139,8 @@ if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
 
 if st.session_state['sifre_degistirme_modu']:
-    if st.session_state.get('ilk_giris_uyarisi'):
-        st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
-    else:
-        st.warning("⚠️ Şifrenizin kullanım süresi (90 gün) dolmuş veya değişiklik talep ettiniz. Lütfen yeni şifre belirleyin.")
+    if st.session_state.get('ilk_giris_uyarisi'): st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için şifrenizi belirleyin.")
+    else: st.warning("⚠️ Şifrenizin kullanım süresi dolmuş veya değişiklik talep ettiniz. Lütfen yeni şifre belirleyin.")
         
     yeni_sifre = st.text_input("Yeni Şifre:", type="password")
     yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar):", type="password")
@@ -145,17 +152,14 @@ if st.session_state['sifre_degistirme_modu']:
             yeni_sifre_hash = sifre_hashle(yeni_sifre)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Şifre') + 1, yeni_sifre_hash)
             kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('Son Güncelleme') + 1, bugun)
-            
             if 'İlk Giriş' in df_kullanicilar.columns:
                 kullanici_tablosu.update_cell(satir_no, df_kullanicilar.columns.get_loc('İlk Giriş') + 1, 'Hayır')
-            
             st.success("Şifreniz güncellendi! Lütfen sayfayı yenileyerek yeni şifrenizle giriş yapın.")
             st.session_state['sifre_degistirme_modu'] = False
             st.session_state['giris_yapildi'] = False
             st.session_state['ilk_giris_uyarisi'] = False
             st.stop()
-        else:
-            st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+        else: st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
     st.stop()
 
 if not st.session_state['giris_yapildi']:
@@ -176,7 +180,6 @@ if not st.session_state['giris_yapildi']:
                     (df_kullanicilar['Kullanıcı Adı'] == kadi_input) & 
                     ((df_kullanicilar['Şifre'].astype(str) == str(sifre_input)) | (df_kullanicilar['Şifre'].astype(str) == girilen_hash))
                 ]
-                
                 if not kullanici.empty:
                     yetki = str(kullanici['Yetki'].values[0]).strip().lower()
                     if yetki in ["gida", "gıda", "temizlik", "yonetici", "yönetici", "merkez yönetici"]:
@@ -184,12 +187,9 @@ if not st.session_state['giris_yapildi']:
                         firma = str(kullanici['Firma'].values[0]).strip() if 'Firma' in kullanici else kadi_input
                         st.session_state['firma'] = firma if firma and firma.lower() != "nan" else kadi_input
                         
-                        if yetki in ["yonetici", "yönetici", "merkez yönetici"]:
-                            st.session_state['rol'] = "admin"
-                        elif yetki in ["gida", "gıda"]:
-                            st.session_state['rol'] = "gida"
-                        else:
-                            st.session_state['rol'] = "temizlik"
+                        if yetki in ["yonetici", "yönetici", "merkez yönetici"]: st.session_state['rol'] = "admin"
+                        elif yetki in ["gida", "gıda"]: st.session_state['rol'] = "gida"
+                        else: st.session_state['rol'] = "temizlik"
                         
                         st.session_state['telegram_token'] = str(kullanici['Telegram Token'].values[0]) if 'Telegram Token' in kullanici else ""
                         st.session_state['telegram_chat_id'] = str(kullanici['Chat ID'].values[0]) if 'Chat ID' in kullanici else ""
@@ -201,17 +201,13 @@ if not st.session_state['giris_yapildi']:
                             st.rerun()
                         else:
                             son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
-                            gecen_gun = (datetime.today() - son_guncelleme).days
-                            if gecen_gun >= 90:
-                                st.session_state['sifre_degistirme_modu'] = True
+                            if (datetime.today() - son_guncelleme).days >= 90: st.session_state['sifre_degistirme_modu'] = True
                             else:
                                 st.session_state['sifre_degistirme_modu'] = False
                                 st.session_state['giris_yapildi'] = True
                                 st.rerun()
-                    else:
-                        st.error("❌ Bu sisteme giriş yetkiniz bulunmamaktadır!")
-            else:
-                st.error("❌ Kullanıcı adı veya şifre hatalı!")
+                    else: st.error("❌ Bu sisteme giriş yetkiniz bulunmamaktadır!")
+            else: st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
     if st.session_state['rol'] == 'admin':
         st.info("👑 **Merkezi Yönetici Modu:** Kendi firmanız adına işlemlerinizi yürütebilirsiniz.")
@@ -245,8 +241,7 @@ else:
         if duyuru_kayitlari:
             aktif_duyuru = str(duyuru_kayitlari[0].get('Aktif', 'Hayır'))
             duyuru_mesaji = str(duyuru_kayitlari[0].get('Mesaj', ''))
-            if aktif_duyuru == 'Evet' and duyuru_mesaji.strip():
-                st.warning(f"📢 **SİSTEM DUYURUSU:** {duyuru_mesaji}")
+            if aktif_duyuru == 'Evet' and duyuru_mesaji.strip(): st.warning(f"📢 **SİSTEM DUYURUSU:** {duyuru_mesaji}")
     except: pass
 
     if st.session_state['rol'] == 'admin':
@@ -258,20 +253,17 @@ else:
         st.markdown(f"### 📋 Uyarılar")
         krt_sayisi = 0
         telegram_raporu = f"⚠️ {st.session_state['firma']} - {depo_adi.upper()} UYARI RAPORU ⚠️\n\n"
-        
         for index, row in df.iterrows():
             urun_adi = str(row.get('Ürün Adı', 'Bilinmeyen Ürün')).strip()
             stok_no = str(row.get('Stok No', '-'))
             miktar_metni = str(row.get('Miktar', '0')).strip()
             birim = str(row.get('Birim', '')).strip()
-            
             try:
                 skt_metni = str(row.get('SKT', '')).strip()
                 if skt_metni and skt_metni != "-" and skt_metni.lower() != "nan":
                     skt = datetime.strptime(skt_metni, '%Y-%m-%d').date()
                     kalan = (skt - bugun).days
                     uyari_baslik = f"{urun_adi} (Stok No: {stok_no} | {miktar_metni} {birim})"
-                    
                     if kalan < 0:
                         st.error(f"❌ {uyari_baslik} - TARİHİ GEÇTİ! ({skt_metni})")
                         telegram_raporu += f"❌ {uyari_baslik} - TARİHİ GEÇTİ!\n"
@@ -281,24 +273,17 @@ else:
                         telegram_raporu += f"⚠️ {uyari_baslik} - {kalan} gün kaldı!\n"
                         krt_sayisi += 1
             except: pass
-            
             try:
                 kritik_metni = str(row.get('Kritik Stok', '10')).strip()
                 if not miktar_metni or miktar_metni.lower() == "nan": miktar_metni = "0"
                 if not kritik_metni or kritik_metni.lower() == "nan": kritik_metni = "10"
-                
-                miktar_val = float(miktar_metni)
-                kritik_val = float(kritik_metni)
-                
-                if miktar_val <= kritik_val:
-                    st.error(f"📉 STOK ALARMI: {urun_adi} bitmek üzere! (Kalan: {int(miktar_val)} {birim})")
-                    telegram_raporu += f"📉 ALARM: {urun_adi} (Kalan: {int(miktar_val)} {birim})\n"
+                if float(miktar_metni) <= float(kritik_metni):
+                    st.error(f"📉 STOK ALARMI: {urun_adi} bitmek üzere! (Kalan: {int(float(miktar_metni))} {birim})")
+                    telegram_raporu += f"📉 ALARM: {urun_adi} (Kalan: {int(float(miktar_metni))} {birim})\n"
                     krt_sayisi += 1
             except: pass
 
-        if krt_sayisi == 0:
-            st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
-
+        if krt_sayisi == 0: st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
         if st.button("📲 Telegram'a Rapor Gönder", type="primary"):
             telegram_mesaj_gonder(telegram_raporu)
             st.toast("✅ Gönderildi!")
@@ -309,8 +294,7 @@ else:
             df['Miktar_Sayi'] = pd.to_numeric(df['Miktar'], errors='coerce').fillna(0)
             toplam_stok_df = df.groupby('Stok No').agg({'Ürün Adı': 'first', 'Miktar_Sayi': 'sum', 'Birim': 'first'}).reset_index()
             toplam_stok_df.rename(columns={'Miktar_Sayi': 'Toplam Miktar'}, inplace=True)
-            toplam_stok_df = toplam_stok_df[['Stok No', 'Ürün Adı', 'Toplam Miktar', 'Birim']]
-            st.dataframe(toplam_stok_df, use_container_width=True, hide_index=True)
+            st.dataframe(toplam_stok_df[['Stok No', 'Ürün Adı', 'Toplam Miktar', 'Birim']], use_container_width=True, hide_index=True)
         except: st.info("Toplamlar hesaplanırken hata oluştu.")
 
         st.markdown("### 🔍 Detaylı Parti Listesi")
@@ -324,39 +308,34 @@ else:
             if not df_perf.empty and 'Firma' in df_perf.columns:
                 c_g1, c_g2 = st.columns(2)
                 with c_g1:
-                    st.markdown("**Firmalara Göre Toplam İşlem Hacmi (Grafik)**")
-                    islem_sayilari = df_perf['Firma'].value_counts()
-                    st.bar_chart(islem_sayilari)
+                    st.markdown("**Firmalara Göre Toplam İşlem Hacmi**")
+                    st.bar_chart(df_perf['Firma'].value_counts())
                 with c_g2:
                     st.markdown("**Firmaların Son Görülme Zamanları**")
                     son_gorme = df_perf.groupby('Firma')['Tarih'].max().reset_index()
                     son_gorme.columns = ['Firma', 'Son İşlem Tarihi']
-                    son_gorme = son_gorme.sort_values('Son İşlem Tarihi', ascending=False)
-                    st.dataframe(son_gorme, use_container_width=True, hide_index=True)
-            else:
-                st.info("Performans grafiği için henüz yeterli hareket verisi yok.")
+                    st.dataframe(son_gorme.sort_values('Son İşlem Tarihi', ascending=False), use_container_width=True, hide_index=True)
 
     with sekme2:
         st.subheader("Depoya Yeni Ürün Ekle")
         with st.form("urun_ekle_formu"):
             col1, col2 = st.columns(2)
-        with col1:
-            stok_no = st.text_input("Stok Numarası (Barkod)")
-            urun_adi = st.text_input("Ürün Adı")
-            miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
-            birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket", "Koli"])
-            alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
-        with col2:
-            kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
-            uretim_tarihi = st.date_input("Üretim Tarihi")
-            skt = st.date_input("Son Kullanma Tarihi (SKT)")
-            st.markdown("---")
-            sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
-            sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
-            sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
-            sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
-            ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
-        
+            with col1:
+                stok_no = st.text_input("Stok Numarası (Barkod)")
+                urun_adi = st.text_input("Ürün Adı")
+                miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
+                birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket", "Koli"])
+                alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
+            with col2:
+                kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
+                uretim_tarihi = st.date_input("Üretim Tarihi")
+                skt = st.date_input("Son Kullanma Tarihi (SKT)")
+                st.markdown("---")
+                sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
+                sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
+                sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
+                sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
+                ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
         if ekle_btn:
             if urun_adi and stok_no:
                 bugun_tarih = datetime.now().strftime("%Y-%m-%d")
@@ -365,16 +344,14 @@ else:
                 s_tar = str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-"
                 s_bit = str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-"
                 s_krt = sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0
-                sahip_firma = st.session_state['firma']
-                yeni_satir = [y_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt, sahip_firma]
+                yeni_satir = [y_id, stok_no, urun_adi, miktar, birim, bugun_tarih, str(skt), str(uretim_tarihi), bugun_tarih, "", kritik_seviye, alim_turu, s_no, s_tar, s_bit, s_krt, st.session_state['firma']]
                 satir_tam = yeni_satir + [""] * max(0, len(aktif_ws.row_values(1)) - len(yeni_satir))
                 aktif_ws.append_row(satir_tam[:len(aktif_ws.row_values(1))])
                 log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
-                st.success(f"✅ Ürün {sahip_firma} deposuna başarıyla kaydedildi!")
+                st.success(f"✅ Ürün depoya başarıyla kaydedildi!")
                 st.cache_resource.clear()
                 st.rerun()
-            else:
-                st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
+            else: st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
 
     with sekme3:
         st.subheader("🔄 Ürün Bilgilerini Güncelle ve Sil")
@@ -383,7 +360,6 @@ else:
             secili_id = int(secili_guncelleme.split(" - ")[0])
             urun = df[df['ID'] == secili_id].iloc[0]
             urun_miktar = int(float(str(urun.get('Miktar', '0')).strip() or '0'))
-            
             with st.form("guncelleme_formu"):
                 c_g1, c_g2 = st.columns(2)
                 with c_g1:
@@ -395,12 +371,8 @@ else:
                     except: skt_val = bugun
                     y_skt = st.date_input("SKT:", value=skt_val)
                     y_kritik = st.number_input("Depo Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
-                
                 c_btn1, c_btn2 = st.columns(2)
-                kaydet_tik = c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary")
-                sil_tik = c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil")
-                
-                if kaydet_tik:
+                if c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary"):
                     satir = int(urun['GS_Row'])
                     aktif_ws.update_cell(satir, 2, yeni_stok) 
                     aktif_ws.update_cell(satir, 4, urun_miktar - cikis + giris)  
@@ -411,11 +383,10 @@ else:
                     st.success("Güncellendi!")
                     st.cache_resource.clear()
                     st.rerun()
-                    
-                if sil_tik:
+                if c_btn2.form_submit_button("🗑️ Ürünü Depodan Tamamen Sil"):
                     satir = int(urun['GS_Row'])
                     aktif_ws.delete_rows(satir)
-                    log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün depodan tamamen kaldırıldı")
+                    log_kaydet(st.session_state['kullanici'], "SİLME", urun['Ürün Adı'], urun_miktar, "Ürün tamamen silindi")
                     st.success(f"🗑️ Ürün depodan silindi!")
                     st.cache_resource.clear()
                     st.rerun()
@@ -425,18 +396,14 @@ else:
         aranan_stok = st.text_input("🔍 Stok Numarasını Yazın:")
         kamera_ac = st.checkbox("📷 QR Okutmak İçin Kamerayı Aç")
         resim = None
-        if kamera_ac:
-            resim = st.camera_input("QR Kodu Kameraya Gösterin")
-            
+        if kamera_ac: resim = st.camera_input("QR Kodu Kameraya Gösterin")
         bulunan = str(aranan_stok).strip() if aranan_stok else None
-        
         if resim:
             cv_img = cv2.cvtColor(np.array(Image.open(resim)), cv2.COLOR_RGB2BGR)
             data, _, _ = cv2.QRCodeDetector().detectAndDecode(cv_img)
             if data:
                 try: bulunan = next((s.split("Stok No:")[1].strip() for s in data.split('\n') if "Stok No:" in s), None)
                 except: pass
-                
         if bulunan:
             eslesen = df[df['Stok No'].astype(str).str.strip() == bulunan]
             if not eslesen.empty:
@@ -464,41 +431,29 @@ else:
                 secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
                 ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
                 st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
-            
             with c_kart2:
                 st.markdown("**Toplu QR Kod Çıktısı (A4)**")
-                st.info("Kendi deponuzdaki ürün barkodlarını A4 formatında yazdırmak için belgeyi indirin.")
                 html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo Barkodları</h2><div class='grid'>"
                 for _, row in df.iterrows():
-                    u_adi = str(row.get('Ürün Adı', ''))
-                    s_no = str(row.get('Stok No', ''))
-                    q_data = qr_olustur(f"Ürün: {u_adi}\nStok No: {s_no}")
-                    b64_qr = base64.b64encode(q_data).decode()
-                    html_icerik += f"<div class='card'><div class='title'>{u_adi}</div><div class='stok'>Stok No: {s_no}</div><img src='data:image/png;base64,{b64_qr}'></div>"
+                    q_data = qr_olustur(f"Ürün: {str(row.get('Ürün Adı', ''))}\nStok No: {str(row.get('Stok No', ''))}")
+                    html_icerik += f"<div class='card'><div class='title'>{str(row.get('Ürün Adı', ''))}</div><div class='stok'>Stok No: {str(row.get('Stok No', ''))}</div><img src='data:image/png;base64,{base64.b64encode(q_data).decode()}'></div>"
                 html_icerik += "</div></body></html>"
                 st.download_button(label="📄 Yazdırılabilir Belgeyi İndir", data=html_icerik, file_name="MIDES_Barkodlar.html", mime="text/html", use_container_width=True)
-        else:
-            st.info("Deponuzda henüz ürün bulunmuyor.")
 
     with sekme5:
         st.subheader(f"📝 {st.session_state['firma']} Hareket Geçmişi")
         df_gecmis = hareketleri_getir()
         if not df_gecmis.empty:
             st.dataframe(df_gecmis, use_container_width=True, hide_index=True)
-            csv = df_gecmis.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📥 Raporu İndir (Excel/CSV)", data=csv, file_name=f"Hareket_Raporu_{datetime.now().strftime('%Y%m%d')}.csv", mime='text/csv')
-        else:
-            st.info("Bu firmanın geçmiş bir hareketi bulunmamaktadır.")
+            st.download_button(label="📥 Raporu İndir (Excel/CSV)", data=df_gecmis.to_csv(index=False).encode('utf-8-sig'), file_name=f"Hareket_{datetime.now().strftime('%Y%m%d')}.csv", mime='text/csv')
+        else: st.info("Bu firmanın geçmiş bir hareketi bulunmamaktadır.")
             
     with sekme7:
         st.subheader("📑 Piyasa Alımı & Sözleşme Takibi")
         if 'Alım Türü' in df.columns:
             df_piyasa = df[df['Alım Türü'] == 'Piyasa Alımı'].copy()
-            if not df_piyasa.empty:
-                sozlesme_ozet = df_piyasa[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Sözleşme Kritik', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']]
-                st.dataframe(sozlesme_ozet, use_container_width=True, hide_index=True)
-            else:
-                st.info("Kayıtlı sözleşmeli alımınız yoktur.")
+            if not df_piyasa.empty: st.dataframe(df_piyasa[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Sözleşme Kritik', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']], use_container_width=True, hide_index=True)
+            else: st.info("Kayıtlı sözleşmeli alımınız yoktur.")
 
     with sekme8:
         st.subheader("💬 Geri Bildirim")
@@ -507,43 +462,28 @@ else:
             mesaj = st.text_area("Mesajınız:")
             if st.form_submit_button("Gönder", use_container_width=True) and mesaj.strip():
                 zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                firma = st.session_state.get('firma', 'Bilinmiyor')
-                satir = [len(ws_geri_bildirim.get_all_values()), zaman, st.session_state['kullanici'], tur, mesaj, firma]
-                headers = ws_geri_bildirim.row_values(1)
-                if "Firma" not in headers: ws_geri_bildirim.update_cell(1, 6, "Firma")
-                ws_geri_bildirim.append_row(satir)
+                ws_geri_bildirim.append_row([len(ws_geri_bildirim.get_all_values()), zaman, st.session_state['kullanici'], tur, mesaj, st.session_state.get('firma', 'Bilinmiyor')])
                 st.success("İletildi!")
-
         if st.session_state['rol'] == 'admin':
             st.divider()
-            st.subheader("📥 Gelen Tüm Geri Bildirimler (Sadece Size Özel)")
+            st.subheader("📥 Gelen Tüm Geri Bildirimler")
             df_gb = geri_bildirimleri_getir()
-            if not df_gb.empty:
-                st.dataframe(df_gb, use_container_width=True, hide_index=True)
-            else:
-                st.info("Henüz kimse geri bildirim göndermemiş.")
+            if not df_gb.empty: st.dataframe(df_gb, use_container_width=True, hide_index=True)
 
     if st.session_state['rol'] == 'admin':
         with sekme9:
             st.subheader("👥 Yeni Müşteri / Personel Hesabı Aç")
-            st.info("Sadece Merkezi Yönetici yetkinizle yeni hesaplar açabilirsiniz.")
             with st.form("yeni_hesap"):
                 c_h1, c_h2, c_h3 = st.columns(3)
                 with c_h1:
                     y_kadi = st.text_input("Personel / Kullanıcı Adı")
                     y_sifre = st.text_input("Geçici Şifre", type="password")
-                with c_h2:
-                    y_yetki = st.selectbox("Vereceğiniz Yetki", ["Gida", "Temizlik", "Yonetici"])
-                with c_h3:
-                    y_firma = st.text_input("Bağlı Olduğu Firma (Örn: X Birliği)")
+                with c_h2: y_yetki = st.selectbox("Vereceğiniz Yetki", ["Gida", "Temizlik", "Yonetici"])
+                with c_h3: y_firma = st.text_input("Bağlı Olduğu Firma (Örn: X Birliği)")
                 
-                if st.form_submit_button("Yeni Kullanıcı Hesabı Oluştur", type="primary"):
+                if st.form_submit_button("Kullanıcı Oluştur", type="primary"):
                     if y_kadi and y_sifre and y_firma:
                         k_headers = kullanici_tablosu.row_values(1)
-                        if "Firma" not in k_headers:
-                            k_headers.append("Firma")
-                            kullanici_tablosu.update_cell(1, len(k_headers), "Firma")
-                            
                         yeni_h_satir = [""] * len(k_headers)
                         if "Kullanıcı Adı" in k_headers: yeni_h_satir[k_headers.index("Kullanıcı Adı")] = y_kadi
                         if "Şifre" in k_headers: yeni_h_satir[k_headers.index("Şifre")] = sifre_hashle(y_sifre)
@@ -551,17 +491,13 @@ else:
                         if "Firma" in k_headers: yeni_h_satir[k_headers.index("Firma")] = y_firma
                         if "İlk Giriş" in k_headers: yeni_h_satir[k_headers.index("İlk Giriş")] = "Evet"
                         if "Son Güncelleme" in k_headers: yeni_h_satir[k_headers.index("Son Güncelleme")] = datetime.now().strftime('%Y-%m-%d')
-                        
                         kullanici_tablosu.append_row(yeni_h_satir)
-                        st.success(f"Tebrikler! '{y_kadi}' kullanıcısı '{y_firma}' firmasına '{y_yetki}' yetkisiyle başarıyla eklendi.")
+                        st.success(f"Kullanıcı eklendi!")
                         st.cache_resource.clear()
-                        st.rerun()
-                    else:
-                        st.error("Kullanıcı Adı, Şifre ve Bağlı Olduğu Firma alanları boş bırakılamaz.")
+                    else: st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
                         
         with sekme10:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
-            st.info("Buraya yazdığınız mesaj, sisteme giriş yapan tüm kullanıcıların ekranının en üstünde dikkat çekici bir uyarı bandı olarak görünür.")
             mevcut_mesaj = ""
             mevcut_aktif_mi = False
             try:
@@ -574,152 +510,172 @@ else:
             with st.form("duyuru_formu"):
                 d_mesaj = st.text_area("Duyuru Mesajınız:", value=mevcut_mesaj)
                 d_aktif = st.checkbox("Duyuruyu Aktif Et (Herkes görsün)", value=mevcut_aktif_mi)
-                
-                if st.form_submit_button("Duyuruyu Kaydet / Güncelle", type="primary"):
-                    if not ws_duyuru.row_values(1): ws_duyuru.append_row(["Mesaj", "Aktif"])
+                if st.form_submit_button("Kaydet", type="primary"):
                     yeni_durum = "Evet" if d_aktif else "Hayır"
-                    if len(ws_duyuru.get_all_values()) < 2:
-                        ws_duyuru.append_row([d_mesaj, yeni_durum])
+                    if len(ws_duyuru.get_all_values()) < 2: ws_duyuru.append_row([d_mesaj, yeni_durum])
                     else:
                         ws_duyuru.update_cell(2, 1, d_mesaj)
                         ws_duyuru.update_cell(2, 2, yeni_durum)
-                    st.success("Duyuru ayarları başarıyla güncellendi!")
+                    st.success("Duyuru güncellendi!")
                     st.cache_resource.clear()
                     st.rerun()
 
-    # --- AKILLI SKT SEÇİMİ VE FEFO MANTIKLI TOPLU ÇIKIŞ MODÜLÜ ---
+    # --- GEMINI YAPAY ZEKA DESTEKLİ TOPLU ÇIKIŞ MODÜLÜ ---
     with sekme11:
-        st.subheader("📂 Excel/CSV ile Toplu Çıkış İşlemi")
-        st.info("Telefonunuzdaki tarayıcı uygulamaları (CamScanner vb.) ile oluşturduğunuz Excel veya CSV listesini buraya yükleyin.")
+        st.subheader("📂 Akıllı Toplu Çıkış İşlemi")
         
-        yuklenen_dosya = st.file_uploader("Çıkış Yapılacak Dosyayı Yükleyin", type=['xlsx', 'xls', 'csv'])
+        giris_yontemi = st.radio("Listeyi Sisteme Nasıl Aktaracaksınız?", ["📸 Fotoğraf Çekerek (Yapay Zeka Okur)", "📥 Excel / CSV Dosyası Yükleyerek"], horizontal=True)
         
-        if yuklenen_dosya:
-            try:
-                if yuklenen_dosya.name.endswith('.csv'):
-                    df_yuklenen = pd.read_csv(yuklenen_dosya)
-                else:
-                    df_yuklenen = pd.read_excel(yuklenen_dosya)
-                
-                st.success("✅ Dosya başarıyla okundu! Lütfen MİDES'in hangi sütunları baz alacağını seçin.")
-                
-                c1, c2, c3 = st.columns(3)
-                stok_sutunu = c1.selectbox("Stok No (Barkod) Sütunu:", ["Seçiniz..."] + list(df_yuklenen.columns))
-                miktar_sutunu = c2.selectbox("Düşülecek Miktar Sütunu:", ["Seçiniz..."] + list(df_yuklenen.columns))
-                skt_sutunu = c3.selectbox("SKT Sütunu (Opsiyonel Eşleştirme):", ["Yok (En Yakın Tarihliden Otomatik Düş)"] + list(df_yuklenen.columns))
-                
-                if stok_sutunu != "Seçiniz..." and miktar_sutunu != "Seçiniz...":
-                    onay_listesi = []
-                    hatalar = []
-                    
-                    for idx, row in df_yuklenen.iterrows():
-                        aranan_stok = str(row[stok_sutunu]).strip()
-                        if aranan_stok == "nan" or not aranan_stok:
-                            continue
-                            
-                        try: dusulecek = float(row[miktar_sutunu])
-                        except: dusulecek = 0
-                        
-                        if dusulecek > 0:
-                            # Aynı stok numarasına sahip tüm ürünleri bul
-                            eslesen = df[df['Stok No'].astype(str).str.strip() == aranan_stok].copy()
-                            if not eslesen.empty:
-                                # Hayati Özellik: SKT tarihlerini gerçek tarihe çevirip en eski (en yakın) olana göre sırala (FEFO)
-                                eslesen['SKT_Date'] = pd.to_datetime(eslesen['SKT'], errors='coerce', dayfirst=True)
-                                eslesen = eslesen.sort_values(by='SKT_Date')
-                                
-                                # Eğer Excel'den özel bir SKT sütunu seçilmişse sadece o tarihi ara
-                                if skt_sutunu != "Yok (En Yakın Tarihliden Otomatik Düş)":
-                                    try:
-                                        aranan_skt = pd.to_datetime(row[skt_sutunu], dayfirst=True).strftime('%Y-%m-%d')
-                                    except:
-                                        aranan_skt = str(row[skt_sutunu]).strip()
-                                        
-                                    tam_eslesen = eslesen[eslesen['SKT'] == aranan_skt]
-                                    if not tam_eslesen.empty:
-                                        eslesen = tam_eslesen
-                                    else:
-                                        hatalar.append(f"❌ '{aranan_stok}' stok numaralı ürün deponuzda var ancak '{aranan_skt}' SKT'li parti bulunamadı.")
-                                        continue
-                                
-                                mevcut_miktar = float(eslesen.iloc[0].get('Miktar', 0) or 0)
-                                urun_adi = eslesen.iloc[0]['Ürün Adı']
-                                islem_skt = eslesen.iloc[0]['SKT'] # Hangi partiden düştüğünü bilelim
-                                gs_row = int(eslesen.iloc[0]['GS_Row'])
-                                kalan = mevcut_miktar - dusulecek
-                                durum = "✅ Uygun" if kalan >= 0 else "⚠️ Yetersiz"
-                                
-                                onay_listesi.append({
-                                    'Stok No': aranan_stok,
-                                    'Ürün Adı': urun_adi,
-                                    'İşlem SKT': islem_skt, # Tabloda görünecek yeni SKT sütunu
-                                    'Mevcut Stok': mevcut_miktar,
-                                    'Çıkış Miktarı': dusulecek,
-                                    'Kalan Stok': kalan,
-                                    'Durum': durum,
-                                    'GS_Row': gs_row
-                                })
+        df_yuklenen = None
+        
+        if "Fotoğraf" in giris_yontemi:
+            st.info("💡 **Gelişmiş Görüntü İşleme:** Listenin fotoğrafını çekin veya yükleyin. Yapay zeka tüm tabloyu, filigranları atlayarak hatasız okur ve düzenleme ekranına getirir.")
+            resim_dosyasi = st.file_uploader("Kamera ile çekin veya galeriden seçin (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
+            
+            if resim_dosyasi:
+                if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
+                    with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen 10-15 saniye bekleyin..."):
+                        try:
+                            gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+                            if not gemini_api_key:
+                                st.error("❌ Gemini API Anahtarı bulunamadı! Lütfen ayarlardan Secrets bölümüne GEMINI_API_KEY ekleyin.")
                             else:
-                                hatalar.append(f"❌ '{aranan_stok}' stok numaralı ürün deponuzda bulunamadı.")
+                                genai.configure(api_key=gemini_api_key)
+                                model = genai.GenerativeModel('gemini-1.5-flash')
+                                prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. 
+Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al.
+Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. 
+Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}, {"Stok No": "8945270085201", "Miktar": "80,75"}]"""
+                                img = Image.open(resim_dosyasi)
+                                response = model.generate_content([prompt, img])
                                 
-                    if onay_listesi:
-                        st.markdown("### 🔍 İşlem Önizlemesi ve Düzenleme Tablosu")
-                        
-                        if hatalar:
-                            with st.expander("⚠️ Bulunamayan / Eşleşmeyen Ürünler (Tıklayıp Görün)"):
-                                for h in hatalar: st.write(h)
-
-                        df_onay = pd.DataFrame(onay_listesi)
-                        
-                        with st.form("toplu_onay_formu"):
-                            st.info("💡 **MİKTARI DEĞİŞTİRME:** Yanlış okunan rakamlar varsa, tablodaki **'✏️ Çıkış Miktarı'** sütununa çift tıklayıp düzeltebilirsiniz.")
-                            
-                            duzenlenmis_df = st.data_editor(
-                                df_onay,
-                                column_config={
-                                    "Çıkış Miktarı": st.column_config.NumberColumn(
-                                        "✏️ Çıkış Miktarı (Düzenle)",
-                                        min_value=0.0,
-                                        step=1.0,
-                                        required=True
-                                    ),
-                                    "GS_Row": None 
-                                },
-                                # İşlem SKT sütunu da kilitli (düzenlenemez) sütunlara eklendi
-                                disabled=["Stok No", "Ürün Adı", "İşlem SKT", "Mevcut Stok", "Kalan Stok", "Durum"],
-                                hide_index=True,
-                                use_container_width=True
-                            )
-                            
-                            if st.form_submit_button("💾 Düzeltmeleri Kabul Et ve Toplu Çıkışı Onayla", type="primary"):
-                                g_updates = []
-                                log_satirlari = []
-                                zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                mevcut_id = len(ws_hareket.get_all_values())
-                                firma_adi = st.session_state.get('firma', 'Bilinmiyor')
-                                k_adi = st.session_state['kullanici']
-                                
-                                for i, row_data in duzenlenmis_df.iterrows():
-                                    guncel_cikis = float(row_data['Çıkış Miktarı'])
-                                    mevcut = float(row_data['Mevcut Stok'])
-                                    kalan_son = mevcut - guncel_cikis
+                                json_text = response.text.strip()
+                                if json_text.startswith("```json"):
+                                    json_text = json_text.replace("```json", "").replace("```", "").strip()
                                     
-                                    if guncel_cikis > 0:
-                                        g_updates.append({'range': f"D{row_data['GS_Row']}", 'values': [[kalan_son]]})
-                                        log_satirlari.append([
-                                            mevcut_id + i, zaman, k_adi, "ÇIKIŞ", f"{row_data['Ürün Adı']} (SKT: {row_data['İşlem SKT']})", 
-                                            guncel_cikis, "Excel ile Toplu Çıkış", firma_adi
-                                        ])
-                                
-                                if g_updates:
-                                    aktif_ws.batch_update(g_updates)
-                                    ws_hareket.append_rows(log_satirlari)
-                                    st.success("✅ Harika! Tüm liste düzeltilmiş rakamlarla hatasız olarak düşüldü ve geçmişe kaydedildi.")
-                                    st.cache_resource.clear()
-                                    st.rerun()
+                                ai_data = json.loads(json_text)
+                                st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
+                                st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
+                        except Exception as e:
+                            st.error(f"Fotoğraf okunurken hata oluştu. Lütfen fotoğrafın net olduğundan emin olun. Detay: {e}")
+                
+                if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
+                    df_yuklenen = st.session_state['ai_okunan_df']
+                    
+        else:
+            yuklenen_dosya = st.file_uploader("Excel veya CSV Dosyasını Yükleyin", type=['xlsx', 'xls', 'csv'])
+            if yuklenen_dosya:
+                try:
+                    if yuklenen_dosya.name.endswith('.csv'): df_yuklenen = pd.read_csv(yuklenen_dosya)
+                    else: df_yuklenen = pd.read_excel(yuklenen_dosya)
+                    st.success("✅ Excel dosyası başarıyla okundu!")
+                except Exception as e: st.error(f"Dosya okuma hatası: {e}")
+
+        # Ortak Onay ve Düzenleme Arayüzü (Hem Excel Hem Yapay Zeka İçin)
+        if df_yuklenen is not None and not df_yuklenen.empty:
+            c1, c2, c3 = st.columns(3)
+            kolonlar = list(df_yuklenen.columns)
+            stok_idx = kolonlar.index("Stok No") + 1 if "Stok No" in kolonlar else 0
+            mik_idx = kolonlar.index("Miktar") + 1 if "Miktar" in kolonlar else 0
+            
+            stok_sutunu = c1.selectbox("Stok No (Barkod) Sütunu:", ["Seçiniz..."] + kolonlar, index=stok_idx)
+            miktar_sutunu = c2.selectbox("Düşülecek Miktar Sütunu:", ["Seçiniz..."] + kolonlar, index=mik_idx)
+            skt_sutunu = c3.selectbox("SKT Sütunu (Opsiyonel Eşleştirme):", ["Yok (En Yakın Tarihliden Otomatik Düş)"] + kolonlar)
+            
+            if stok_sutunu != "Seçiniz..." and miktar_sutunu != "Seçiniz...":
+                onay_listesi = []
+                hatalar = []
+                
+                for idx, row in df_yuklenen.iterrows():
+                    aranan_stok = str(row[stok_sutunu]).strip()
+                    if aranan_stok == "nan" or not aranan_stok: continue
+                        
+                    # Rakamlardaki virgül formatını düzelten zeka
+                    dusulecek = rakam_temizle(row[miktar_sutunu])
+                    
+                    if dusulecek > 0:
+                        eslesen = df[df['Stok No'].astype(str).str.strip() == aranan_stok].copy()
+                        if not eslesen.empty:
+                            eslesen['SKT_Date'] = pd.to_datetime(eslesen['SKT'], errors='coerce', dayfirst=True)
+                            eslesen = eslesen.sort_values(by='SKT_Date')
+                            
+                            if skt_sutunu != "Yok (En Yakın Tarihliden Otomatik Düş)":
+                                try: aranan_skt = pd.to_datetime(row[skt_sutunu], dayfirst=True).strftime('%Y-%m-%d')
+                                except: aranan_skt = str(row[skt_sutunu]).strip()
+                                    
+                                tam_eslesen = eslesen[eslesen['SKT'] == aranan_skt]
+                                if not tam_eslesen.empty: eslesen = tam_eslesen
                                 else:
-                                    st.warning("Düşülecek herhangi bir ürün kalmadı.")
-                    else:
-                        st.warning("Yüklenen listede düşülecek miktar bulunamadı veya stok numaraları sistemle eşleşmedi.")
-            except Exception as e:
-                st.error(f"Dosya okuma veya işleme hatası oluştu: {e}")
+                                    hatalar.append(f"❌ '{aranan_stok}' numaralı ürünün '{aranan_skt}' SKT'li partisi bulunamadı.")
+                                    continue
+                            
+                            mevcut_miktar = float(eslesen.iloc[0].get('Miktar', 0) or 0)
+                            urun_adi = eslesen.iloc[0]['Ürün Adı']
+                            islem_skt = eslesen.iloc[0]['SKT'] 
+                            gs_row = int(eslesen.iloc[0]['GS_Row'])
+                            kalan = mevcut_miktar - dusulecek
+                            durum = "✅ Uygun" if kalan >= 0 else "⚠️ Yetersiz"
+                            
+                            onay_listesi.append({
+                                'Stok No': aranan_stok,
+                                'Ürün Adı': urun_adi,
+                                'İşlem SKT': islem_skt,
+                                'Mevcut Stok': mevcut_miktar,
+                                'Çıkış Miktarı': dusulecek,
+                                'Kalan Stok': kalan,
+                                'Durum': durum,
+                                'GS_Row': gs_row
+                            })
+                        else:
+                            hatalar.append(f"❌ '{aranan_stok}' stok numaralı ürün depoda bulunamadı.")
+                            
+                if onay_listesi:
+                    st.markdown("### 🔍 İşlem Önizlemesi ve Düzenleme Tablosu")
+                    if hatalar:
+                        with st.expander("⚠️ Bulunamayan / Eşleşmeyen Ürünler (Tıklayıp Görün)"):
+                            for h in hatalar: st.write(h)
+
+                    df_onay = pd.DataFrame(onay_listesi)
+                    
+                    with st.form("toplu_onay_formu"):
+                        st.info("💡 **HIZLI DÜZELTME:** Eğer fotoğraf taramasında yanlış okunan bir rakam varsa, aşağıdaki tabloda **'✏️ Çıkış Miktarı'** sütununa çift tıklayarak rakamı hemen düzeltebilirsiniz.")
+                        
+                        duzenlenmis_df = st.data_editor(
+                            df_onay,
+                            column_config={
+                                "Çıkış Miktarı": st.column_config.NumberColumn("✏️ Çıkış Miktarı (Düzenle)", min_value=0.0, step=1.0, required=True),
+                                "GS_Row": None 
+                            },
+                            disabled=["Stok No", "Ürün Adı", "İşlem SKT", "Mevcut Stok", "Kalan Stok", "Durum"],
+                            hide_index=True,
+                            use_container_width=True
+                        )
+                        
+                        if st.form_submit_button("💾 Düzeltmeleri Kabul Et ve Toplu Çıkışı Onayla", type="primary"):
+                            g_updates = []
+                            log_satirlari = []
+                            zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            mevcut_id = len(ws_hareket.get_all_values())
+                            firma_adi = st.session_state.get('firma', 'Bilinmiyor')
+                            k_adi = st.session_state['kullanici']
+                            
+                            for i, row_data in duzenlenmis_df.iterrows():
+                                guncel_cikis = float(row_data['Çıkış Miktarı'])
+                                mevcut = float(row_data['Mevcut Stok'])
+                                kalan_son = mevcut - guncel_cikis
+                                if guncel_cikis > 0:
+                                    g_updates.append({'range': f"D{row_data['GS_Row']}", 'values': [[kalan_son]]})
+                                    log_satirlari.append([
+                                        mevcut_id + i, zaman, k_adi, "ÇIKIŞ", f"{row_data['Ürün Adı']} (SKT: {row_data['İşlem SKT']})", 
+                                        guncel_cikis, "Yapay Zeka / Toplu Çıkış", firma_adi
+                                    ])
+                            
+                            if g_updates:
+                                aktif_ws.batch_update(g_updates)
+                                ws_hareket.append_rows(log_satirlari)
+                                st.success("✅ Harika! Tüm liste saniyeler içinde hatasız olarak düşüldü ve geçmişe kaydedildi.")
+                                st.session_state['ai_okunan_df'] = None # İşlem bittikten sonra hafızayı temizle
+                                st.cache_resource.clear()
+                                st.rerun()
+                            else: st.warning("Düşülecek herhangi bir ürün kalmadı.")
+                else: st.warning("Yüklenen veride düşülecek ürün eşleştirilemedi.")
