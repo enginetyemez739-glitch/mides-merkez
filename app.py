@@ -542,7 +542,7 @@ else:
                                 img_bytes = resim_dosyasi.getvalue()
                                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                                 
-                                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+                                url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=){gemini_api_key}"
                                 headers = {'Content-Type': 'application/json'}
                                 payload = {
                                     "contents": [{
