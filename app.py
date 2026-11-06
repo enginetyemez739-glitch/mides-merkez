@@ -13,7 +13,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
 import base64
-from google import genai  # Sizin bulduğunuz YENİ kütüphane
+import google.generativeai as genai
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
@@ -356,16 +356,15 @@ else:
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı!")
                             else:
-                                # BULDUĞUNUZ YENİ YAPI BURADA!
-                                client_ai = genai.Client(api_key=gemini_api_key)
+                                genai.configure(api_key=gemini_api_key, transport="rest")
+                                
+                                # İŞTE EKRANDAKİ ÇÖZÜM: 'models/' kaldırıldı, sadece 3.5-flash eklendi
+                                model = genai.GenerativeModel('gemini-3.5-flash')
                                 
                                 prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
                                 img = Image.open(resim_dosyasi)
                                 
-                                response = client_ai.models.generate_content(
-                                    model = genai.GenerativeModel('models/gemini-3.5-flash'),
-                                    contents=[prompt, img]
-                                )
+                                response = model.generate_content([prompt, img])
                                 
                                 json_text = response.text.strip()
                                 if json_text.startswith("```json"):
