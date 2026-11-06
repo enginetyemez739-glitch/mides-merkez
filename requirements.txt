@@ -2,8 +2,6 @@ streamlit
 pandas
 qrcode[pil]
 opencv-python-headless
-gspread
-google-auth
-openpyxl
 google-generativeai>=0.7.2
 pillow
+supabase
