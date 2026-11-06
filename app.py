@@ -535,14 +535,14 @@ else:
                 if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
                     with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen 10-15 saniye bekleyin..."):
                         try:
-                            gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı! Lütfen ayarlardan Secrets bölümüne GEMINI_API_KEY ekleyin.")
                             else:
                                 img_bytes = resim_dosyasi.getvalue()
                                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                                 
-                                url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=){gemini_api_key}"
+                                api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
                                 headers = {'Content-Type': 'application/json'}
                                 payload = {
                                     "contents": [{
@@ -553,17 +553,20 @@ else:
                                     }]
                                 }
                                 
-                                response = requests.post(url, headers=headers, json=payload)
+                                response = requests.post(api_url, params={"key": gemini_api_key}, headers=headers, json=payload)
                                 
                                 if response.status_code == 200:
                                     json_text = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                                    if json_text.startswith("```json"): json_text = json_text.replace("```json", "").replace("```", "").strip()
-                                    st.session_state['ai_okunan_df'] = pd.DataFrame(json.loads(json_text))
+                                    if json_text.startswith("```json"):
+                                        json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                        
+                                    ai_data = json.loads(json_text)
+                                    st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
                                     st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
                                 else:
                                     st.error(f"API Sunucu Hatası: {response.text}")
                         except Exception as e:
-                            st.error(f"Fotoğraf okunurken hata oluştu. Detay: {e}")
+                            st.error(f"Fotoğraf okunurken hata oluştu. Lütfen fotoğrafın net olduğundan emin olun. Detay: {e}")
                 
                 if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
                     df_yuklenen = st.session_state['ai_okunan_df']
@@ -680,7 +683,7 @@ else:
                                 aktif_ws.batch_update(g_updates)
                                 ws_hareket.append_rows(log_satirlari)
                                 st.success("✅ Harika! Tüm liste saniyeler içinde hatasız olarak düşüldü ve geçmişe kaydedildi.")
-                                st.session_state['ai_okunan_df'] = None 
+                                st.session_state['ai_okunan_df'] = None # İşlem bittikten sonra hafızayı temizle
                                 st.cache_resource.clear()
                                 st.rerun()
                             else: st.warning("Düşülecek herhangi bir ürün kalmadı.")
