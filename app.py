@@ -21,30 +21,26 @@ try:
     with open("amblem.png", "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
     
-    # CSS ile logoyu saydam (%8 opacity) ve tam ortada sabitliyoruz
+    # CSS ile logoyu saydam (%7 opacity) ve tam ortada (.stApp ile) sabitliyoruz
     background_style = f"""
     <style>
-    [data-testid="stAppViewContainer"]::before {{
-        content: "";
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(65vw, 65vh); /* Ekranın büyüklüğüne göre kendini ayarlar */
-        height: min(65vw, 65vh);
+    .stApp {{
         background-image: url("data:image/png;base64,{encoded_string}");
-        background-size: contain;
+        background-size: min(65vw, 65vh);
         background-repeat: no-repeat;
         background-position: center;
-        opacity: 0.07; /* Şeffaflık seviyesi: %7 (Çok hafif, gözü yormaz) */
-        z-index: -1; /* Tüm içeriklerin en arkasında kalmasını sağlar */
-        pointer-events: none; /* Tıklamaları engellemez, arka planda kalır */
+        background-attachment: fixed;
+    }}
+    
+    /* İçeriklerin okunabilirliği için arka plana saydam bir beyaz örtü ekler */
+    .stApp > header, .stApp > .main {{
+        background-color: rgba(255, 255, 255, 0.93);
     }}
     </style>
     """
     st.markdown(background_style, unsafe_allow_html=True)
 except Exception:
-    pass # Eğer amblem.png dosyası henüz yüklenmemişse hata vermemesi için koruma
+    pass
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
