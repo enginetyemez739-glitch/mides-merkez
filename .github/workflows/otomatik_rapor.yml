@@ -1,0 +1,28 @@
+name: Gunluk Telegram Raporu
+
+on:
+  schedule:
+    # Türkiye Saati (UTC+3) ile 08:00'e denk gelmesi için UTC 05:00 yazıyoruz.
+    - cron: '0 5 * * *'
+  workflow_dispatch: # Test için manuel çalıştırma butonu ekler
+
+jobs:
+  rapor_gonder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodlari Cek
+        uses: actions/checkout@v3
+      
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Kutuphaneleri Yukle
+        run: pip install pandas requests supabase
+          
+      - name: Raporu Calistir
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python oto_rapor.py
