@@ -1,4 +1,4 @@
-import streamlit as st import hashlib
+import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
@@ -484,7 +484,8 @@ else:
     if st.session_state['rol'] == 'admin':
         with sekme9:
             st.subheader("👥 Yeni Müşteri / Personel Hesabı Aç")
-            with st.form("yeni_hesap"):
+            st.markdown("Sisteme giriş yapabilecek yeni bir kullanıcı hesabı oluşturun.")
+            with st.form("yeni_hesap", clear_on_submit=True):
                 c_h1, c_h2, c_h3 = st.columns(3)
                 with c_h1:
                     y_kadi = st.text_input("Personel / Kullanıcı Adı")
@@ -496,14 +497,20 @@ else:
                 
                 if st.form_submit_button("Kullanıcı Oluştur", type="primary"):
                     if y_kadi and y_sifre and y_firma:
-                        supabase.table('kullanicilar').insert({
-                            "kullanici_adi": y_kadi, "sifre": sifre_hashle(y_sifre),
-                            "yetki": y_yetki, "firma": y_firma, "ilk_giris": "Evet",
-                            "son_guncelleme": datetime.now().strftime('%Y-%m-%d')
-                        }).execute()
-                        st.success(f"Kullanıcı eklendi!")
-                        st.rerun()
-                    else: st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
+                        try:
+                            supabase.table('kullanicilar').insert({
+                                "kullanici_adi": y_kadi, 
+                                "sifre": sifre_hashle(y_sifre),
+                                "yetki": y_yetki, 
+                                "firma": y_firma, 
+                                "ilk_giris": "Evet",
+                                "son_guncelleme": datetime.now().strftime('%Y-%m-%d')
+                            }).execute()
+                            st.success(f"✅ Tebrikler! '{y_kadi}' adlı kullanıcı başarıyla eklendi.")
+                        except Exception as e:
+                            st.error("Kayıt sırasında bir hata oluştu. Kullanıcı adı zaten mevcut olabilir.")
+                    else: 
+                        st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
                         
         with sekme10:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
