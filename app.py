@@ -19,6 +19,7 @@ st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
+# --- AKILLI RAKAM TEMİZLEYİCİ (VİRGÜL/NOKTA HATALARINI ÇÖZER) ---
 def rakam_temizle(deger):
     try:
         if pd.isna(deger) or str(deger).strip() == "": return 0.0
@@ -33,12 +34,14 @@ def rakam_temizle(deger):
     except:
         return 0.0
 
+# --- GİZLİ KASA AYARLARI ---
 try:
     google_json_str = st.secrets["google_json"]
 except:
     st.error("Gizli kasa (Secrets) ayarları bulunamadı!")
     st.stop()
 
+# --- GOOGLE SHEETS BAĞLANTISI (ÖNBELLEKLİ) ---
 @st.cache_resource(ttl=600)
 def google_baglantisini_kur():
     scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -130,6 +133,7 @@ def telegram_mesaj_gonder(mesaj):
             try: requests.post(url, data=payload)
             except: pass
 
+# --- YENİ OTURUM VE ŞİFRE YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
 
@@ -531,16 +535,22 @@ else:
                 if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
                     with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen 10-15 saniye bekleyin..."):
                         try:
-                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+                            # Şifredeki tüm görünmez boşlukları ve satır atlamaları zorla temizliyoruz
+                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip().replace("\n", "").replace("\r", "")
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı! Lütfen ayarlardan Secrets bölümüne GEMINI_API_KEY ekleyin.")
                             else:
                                 img_bytes = resim_dosyasi.getvalue()
                                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                                 
-                                api_link = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){gemini_api_key}".strip()
+                                # Adresi şifresiz, tertemiz ve orijinal 1.5 sürümüyle tanımlıyoruz
+                                api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
                                 
-                                headers = {'Content-Type': 'application/json'}
+                                # Şifreyi adres yerine, güvenli başlık (header) içinde yolluyoruz
+                                headers = {
+                                    'Content-Type': 'application/json',
+                                    'x-goog-api-key': gemini_api_key
+                                }
                                 payload = {
                                     "contents": [{
                                         "parts": [
@@ -550,7 +560,7 @@ else:
                                     }]
                                 }
                                 
-                                response = requests.post(api_link, headers=headers, json=payload)
+                                response = requests.post(api_url, headers=headers, json=payload)
                                 
                                 if response.status_code == 200:
                                     json_text = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
@@ -577,6 +587,7 @@ else:
                     st.success("✅ Excel dosyası başarıyla okundu!")
                 except Exception as e: st.error(f"Dosya okuma hatası: {e}")
 
+        # Ortak Onay ve Düzenleme Arayüzü (Hem Excel Hem Yapay Zeka İçin)
         if df_yuklenen is not None and not df_yuklenen.empty:
             c1, c2, c3 = st.columns(3)
             kolonlar = list(df_yuklenen.columns)
@@ -595,6 +606,7 @@ else:
                     aranan_stok = str(row[stok_sutunu]).strip()
                     if aranan_stok == "nan" or not aranan_stok: continue
                         
+                    # Rakamlardaki virgül formatını düzelten zeka
                     dusulecek = rakam_temizle(row[miktar_sutunu])
                     
                     if dusulecek > 0:
