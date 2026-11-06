@@ -358,8 +358,8 @@ else:
                             else:
                                 genai.configure(api_key=gemini_api_key)
                                 
-                                # GOOGLE'IN BİZZAT HATA MESAJINDA İSTEDİĞİ MODELİ KULLANIYORUZ:
-                                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                                # FAZLADAN 'models/' KISMI SİLİNDİ. İŞTE DOĞRU İSİM:
+                                model = genai.GenerativeModel('gemini-1.5-flash')
                                 
                                 prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
                                 img = Image.open(resim_dosyasi)
@@ -376,7 +376,7 @@ else:
                                 st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
                                 st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
                         except Exception as e:
-                            st.error(f"Sistem Hatası Detayı: {e}")
+                            st.error(f"Sistem Hatası Detayı: {str(e)}")
                 
                 if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
                     df_yuklenen = st.session_state['ai_okunan_df']
