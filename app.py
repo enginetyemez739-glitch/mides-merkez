@@ -194,7 +194,6 @@ else:
     with sekme1:
         st.markdown(f"### 📋 Uyarılar")
         krt_sayisi = 0
-        telegram_raporu = f"⚠️ {st.session_state['firma']} - UYARI RAPORU ⚠️\n\n"
         for _, row in df.iterrows():
             urun, stok, miktar, birim = str(row.get('Ürün Adı', '')), str(row.get('Stok No', '')), str(row.get('Miktar', '0')), str(row.get('Birim', ''))
             try:
@@ -339,7 +338,6 @@ else:
                         ws_duyuru.update_cell(2, 2, "Evet" if aktif else "Hayır")
                     st.success("Duyuru güncellendi!")
 
-    # --- SIFIRDAN YAZILMIŞ, SDK İÇERMEYEN %100 DOĞRUDAN BAĞLANTI (REST API) MODÜLÜ ---
     with sekme11:
         st.subheader("📂 Akıllı Toplu Çıkış İşlemi")
         giris_yontemi = st.radio("Listeyi Sisteme Nasıl Aktaracaksınız?", ["📸 Fotoğraf Çekerek (Yapay Zeka Okur)", "📥 Excel / CSV Dosyası Yükleyerek"], horizontal=True)
