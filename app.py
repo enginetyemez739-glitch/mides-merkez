@@ -29,13 +29,13 @@ def rakam_temizle(deger):
     except:
         return 0.0
 
-# --- SUPABASE BAĞLANTISI ---
+# --- GÜVENLİ SUPABASE BAĞLANTISI ---
 try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    SUPABASE_URL = st.secrets["SUPABASE_URL"].strip().rstrip("/")
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    st.error("⚠️ Gizli kasa (Secrets) ayarlarında Supabase bilgileri bulunamadı!")
+    st.error(f"⚠️ Supabase bağlantı kurulum hatası: {e}")
     st.stop()
 
 # --- VERİTABANI İŞLEM FONKSİYONLARI ---
@@ -57,32 +57,42 @@ def tablo_isimleri_degistir(df):
     return df
 
 def verileri_getir(tablo_adi):
-    res = supabase.table(tablo_adi).select("*").execute()
-    df = pd.DataFrame(res.data)
-    if not df.empty:
-        df = tablo_isimleri_degistir(df)
-        if 'Firma' in df.columns and st.session_state.get('rol') != 'admin':
-            df = df[df['Firma'].astype(str) == st.session_state['firma']]
-    return df
+    try:
+        res = supabase.table(tablo_adi).select("*").execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            df = tablo_isimleri_degistir(df)
+            if 'Firma' in df.columns and st.session_state.get('rol') != 'admin':
+                df = df[df['Firma'].astype(str) == st.session_state['firma']]
+        return df
+    except Exception as e:
+        st.error(f"Veri çekme hatası ({tablo_adi}): {e}")
+        return pd.DataFrame()
 
 def hareketleri_getir():
-    res = supabase.table('hareket_gecmisi').select("*").execute()
-    df = pd.DataFrame(res.data)
-    if not df.empty:
-        df = tablo_isimleri_degistir(df)
-        if st.session_state.get('rol') != 'admin':
-            df = df[df['Firma'].astype(str) == st.session_state['firma']]
-        return df.sort_values(by="ID", ascending=False)
+    try:
+        res = supabase.table('hareket_gecmisi').select("*").execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            df = tablo_isimleri_degistir(df)
+            if st.session_state.get('rol') != 'admin':
+                df = df[df['Firma'].astype(str) == st.session_state['firma']]
+            return df.sort_values(by="ID", ascending=False)
+    except Exception:
+        pass
     return pd.DataFrame(columns=["ID", "Tarih", "Kullanıcı", "İşlem", "Ürün Adı", "Miktar", "Açıklama", "Firma"])
 
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
-    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    firma_adi = st.session_state.get('firma', 'Bilinmiyor')
-    veri = {
-        "tarih": zaman, "kullanici": kullanici, "islem": islem_tipi,
-        "urun_adi": urun_adi, "miktar": miktar, "aciklama": aciklama, "firma": firma_adi
-    }
-    supabase.table('hareket_gecmisi').insert(veri).execute()
+    try:
+        zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        firma_adi = st.session_state.get('firma', 'Bilinmiyor')
+        veri = {
+            "tarih": zaman, "kullanici": kullanici, "islem": islem_tipi,
+            "urun_adi": urun_adi, "miktar": miktar, "aciklama": aciklama, "firma": firma_adi
+        }
+        supabase.table('hareket_gecmisi').insert(veri).execute()
+    except Exception as e:
+        st.warning(f"Log kaydedilemedi: {e}")
 
 def qr_olustur(metin):
     qr = qrcode.QRCode(version=1, box_size=6, border=2)
@@ -107,8 +117,13 @@ def telegram_mesaj_gonder(mesaj):
 if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
 
-kullanicilar_res = supabase.table('kullanicilar').select("*").execute()
-df_kullanicilar = tablo_isimleri_degistir(pd.DataFrame(kullanicilar_res.data)) if kullanicilar_res.data else pd.DataFrame()
+try:
+    kullanicilar_res = supabase.table('kullanicilar').select("*").execute()
+    df_kullanicilar = tablo_isimleri_degistir(pd.DataFrame(kullanicilar_res.data)) if kullanicilar_res.data else pd.DataFrame()
+except Exception as e:
+    st.error(f"🚨 Supabase veritabanına bağlanılamadı! Detay: {e}")
+    st.info("Lütfen Secrets bölümündeki SUPABASE_URL ve SUPABASE_KEY değerlerini kontrol edin.")
+    st.stop()
 
 if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'): 
@@ -155,7 +170,7 @@ if not st.session_state['giris_yapildi']:
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 if df_kullanicilar.empty:
-                    st.error("Veritabanında kullanıcı bulunamadı! Lütfen yönetici hesabınızı SQL üzerinden oluşturun.")
+                    st.error("Veritabanında kayıtlı kullanıcı bulunamadı! SQL Editor üzerinden admin kullanıcısını eklediğinizden emin olun.")
                     st.stop()
                 
                 girilen_hash = sifre_hashle(sifre_input)
@@ -192,7 +207,7 @@ if not st.session_state['giris_yapildi']:
                     else: st.error("❌ Bu sisteme giriş yetkiniz bulunmamaktadır!")
             else: st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
-    # --- ANA ARAYÜZ (SUPABASE DESTEKLİ) ---
+    # --- ANA ARAYÜZ ---
     if st.session_state['rol'] == 'admin':
         st.info("👑 **Merkezi Yönetici Modu:** Tüm yetkilere sahipsiniz.")
         secilen_depo = st.selectbox("Aktif Depo", ["🍎 Gıda Deposu", "🧹 Temizlik Deposu"])
@@ -221,11 +236,14 @@ else:
             st.rerun()
 
     # Duyurular
-    res_duyuru = supabase.table('duyurular').select("*").execute()
-    if res_duyuru.data:
-        aktif_duyuru = str(res_duyuru.data[0].get('aktif', 'Hayır'))
-        duyuru_mesaji = str(res_duyuru.data[0].get('mesaj', ''))
-        if aktif_duyuru == 'Evet' and duyuru_mesaji.strip(): st.warning(f"📢 **SİSTEM DUYURUSU:** {duyuru_mesaji}")
+    try:
+        res_duyuru = supabase.table('duyurular').select("*").execute()
+        if res_duyuru.data:
+            aktif_duyuru = str(res_duyuru.data[0].get('aktif', 'Hayır'))
+            duyuru_mesaji = str(res_duyuru.data[0].get('mesaj', ''))
+            if aktif_duyuru == 'Evet' and duyuru_mesaji.strip(): st.warning(f"📢 **SİSTEM DUYURUSU:** {duyuru_mesaji}")
+    except Exception:
+        pass
 
     if st.session_state['rol'] == 'admin':
         sekme1, sekme2, sekme3, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10, sekme11 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru", "📂 Toplu Çıkış"])
@@ -457,8 +475,11 @@ else:
         if st.session_state['rol'] == 'admin':
             st.divider()
             st.subheader("📥 Gelen Tüm Geri Bildirimler")
-            res_gb = supabase.table('geri_bildirimler').select("*").execute()
-            if res_gb.data: st.dataframe(tablo_isimleri_degistir(pd.DataFrame(res_gb.data)).sort_values(by="ID", ascending=False), use_container_width=True, hide_index=True)
+            try:
+                res_gb = supabase.table('geri_bildirimler').select("*").execute()
+                if res_gb.data: st.dataframe(tablo_isimleri_degistir(pd.DataFrame(res_gb.data)).sort_values(by="ID", ascending=False), use_container_width=True, hide_index=True)
+            except Exception:
+                pass
 
     if st.session_state['rol'] == 'admin':
         with sekme9:
@@ -488,10 +509,13 @@ else:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
             mevcut_mesaj = ""
             mevcut_aktif_mi = False
-            res_d = supabase.table('duyurular').select("*").execute()
-            if res_d.data:
-                mevcut_mesaj = str(res_d.data[0].get('mesaj', ''))
-                mevcut_aktif_mi = str(res_d.data[0].get('aktif', 'Hayır')) == 'Evet'
+            try:
+                res_d = supabase.table('duyurular').select("*").execute()
+                if res_d.data:
+                    mevcut_mesaj = str(res_d.data[0].get('mesaj', ''))
+                    mevcut_aktif_mi = str(res_d.data[0].get('aktif', 'Hayır')) == 'Evet'
+            except Exception:
+                pass
             
             with st.form("duyuru_formu"):
                 d_mesaj = st.text_area("Duyuru Mesajınız:", value=mevcut_mesaj)
