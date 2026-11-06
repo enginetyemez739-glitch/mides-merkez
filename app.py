@@ -483,8 +483,9 @@ else:
 
     if st.session_state['rol'] == 'admin':
         with sekme9:
-            st.subheader("👥 Yeni Müşteri / Personel Hesabı Aç")
-            st.markdown("Sisteme giriş yapabilecek yeni bir kullanıcı hesabı oluşturun.")
+            st.subheader("👥 Kullanıcı Yönetimi")
+            
+            st.markdown("#### ➕ Yeni Müşteri / Personel Hesabı Aç")
             with st.form("yeni_hesap", clear_on_submit=True):
                 c_h1, c_h2, c_h3 = st.columns(3)
                 with c_h1:
@@ -511,7 +512,35 @@ else:
                             st.error("Kayıt sırasında bir hata oluştu. Kullanıcı adı zaten mevcut olabilir.")
                     else: 
                         st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
+
+            st.divider()
+
+            st.markdown("#### 🔄 Mevcut Kullanıcı Şifre Sıfırlama")
+            if not df_kullanicilar.empty:
+                with st.form("sifre_sifirla_formu", clear_on_submit=True):
+                    c_s1, c_s2 = st.columns(2)
+                    with c_s1:
+                        secilen_kullanici = st.selectbox("Şifresi Sıfırlanacak Kullanıcıyı Seçin", df_kullanicilar['Kullanıcı Adı'].tolist())
+                    with c_s2:
+                        yeni_gecici_sifre = st.text_input("Yeni Geçici Şifre (Örn: 1234)", type="password")
                         
+                    if st.form_submit_button("Şifreyi Sıfırla ve Güvenliğe Zorla"):
+                        if yeni_gecici_sifre:
+                            hedef_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == secilen_kullanici].iloc[0]['ID'])
+                            try:
+                                supabase.table('kullanicilar').update({
+                                    "sifre": sifre_hashle(yeni_gecici_sifre),
+                                    "ilk_giris": "Evet",
+                                    "son_guncelleme": datetime.now().strftime('%Y-%m-%d')
+                                }).eq("id", hedef_id).execute()
+                                st.success(f"✅ Başarılı! '{secilen_kullanici}' hesabının şifresi sıfırlandı. İlk girişinde kendi şifresini belirlemeye zorlanacak.")
+                            except Exception as e:
+                                st.error("Sıfırlama sırasında veritabanı hatası oluştu.")
+                        else:
+                            st.warning("Lütfen yeni geçici şifreyi yazınız.")
+            else:
+                st.info("Sistemde henüz kayıtlı kullanıcı yok.")
+
         with sekme10:
             st.subheader("📢 Sistem İçi Duyuru Yayınla")
             mevcut_mesaj = ""
