@@ -350,30 +350,59 @@ else:
             
             if resim_dosyasi:
                 if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
-                    with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen 10-15 saniye bekleyin..."):
+                    with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen bekleyin..."):
                         try:
                             gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı!")
                             else:
                                 genai.configure(api_key=gemini_api_key)
-                                model = genai.GenerativeModel('gemini-1.5-flash')
                                 
-                                prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
+                                gecerli_model_adi = None
                                 
-                                img = Image.open(resim_dosyasi)
-                                response = model.generate_content([prompt, img])
-                                
-                                json_text = response.text.strip()
-                                if json_text.startswith("```json"):
-                                    json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                # 1. ADIM: Google'dan izin verilen modellerin listesini çekiyoruz
+                                try:
+                                    modeller = genai.list_models()
+                                    for m in modeller:
+                                        if 'generateContent' in m.supported_generation_methods:
+                                            # Öncelikli olarak 'flash' veya 'pro' modellerini bulmaya çalış
+                                            if 'flash' in m.name or 'pro' in m.name:
+                                                gecerli_model_adi = m.name
+                                                break
                                     
-                                ai_data = json.loads(json_text)
-                                st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
-                                st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
+                                    # Eğer flash veya pro bulamazsa, izin verilen ilk modeli al
+                                    if not gecerli_model_adi:
+                                        for m in genai.list_models():
+                                            if 'generateContent' in m.supported_generation_methods:
+                                                gecerli_model_adi = m.name
+                                                break
+                                except Exception as model_hata:
+                                    st.error(f"Google'dan model listesi çekilemedi. Hata: {model_hata}")
+                                
+                                # 2. ADIM: Bulunan dinamik modelle okumayı yapıyoruz
+                                if gecerli_model_adi:
+                                    st.info(f"💡 Sistem şu modelle eşleşti ve okumayı başlattı: {gecerli_model_adi}")
+                                    
+                                    model = genai.GenerativeModel(gecerli_model_adi)
+                                    prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
+                                    img = Image.open(resim_dosyasi)
+                                    
+                                    response = model.generate_content([prompt, img])
+                                    
+                                    json_text = response.text.strip()
+                                    if json_text.startswith("```json"):
+                                        json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                    elif json_text.startswith("```"):
+                                        json_text = json_text.replace("```", "").strip()
+                                        
+                                    ai_data = json.loads(json_text)
+                                    st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
+                                    st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
+                                else:
+                                    st.error("❌ Google API Anahtarınızın hiçbir yapay zeka modeline erişim izni yok. (Kotanız dolmuş veya faturalandırma ayarlarınız eksik olabilir).")
+                        
                         except Exception as e:
                             st.error(f"🚨 GOOGLE'IN VERDİĞİ GERÇEK HATA: {str(e)}")
-                            st.info("Lütfen bu kırmızı hata mesajının fotoğrafını bana gönderin. Gerçek sorunun ne olduğunu bu mesaj söyleyecek.")
                 
                 if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
                     df_yuklenen = st.session_state['ai_okunan_df']
