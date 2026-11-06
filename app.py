@@ -174,6 +174,7 @@ else:
         depo_adi = "Gıda Deposu" if st.session_state['rol'] == 'gida' else "Temizlik Deposu"
 
     df = verileri_getir(aktif_ws)
+    bugun = datetime.now().date()
                         
     c_ust1, c_ust2 = st.columns([4, 1])
     with c_ust1: st.title(f"📦 {st.session_state['firma']} - {depo_adi}")
@@ -195,31 +196,61 @@ else:
     with sekme1:
         st.markdown(f"### 📋 Uyarılar")
         krt_sayisi = 0
+        telegram_raporu = f"⚠️ {st.session_state['firma']} - {depo_adi.upper()} UYARI RAPORU ⚠️\n\n"
         for _, row in df.iterrows():
             urun, stok, miktar, birim = str(row.get('Ürün Adı', '')), str(row.get('Stok No', '')), str(row.get('Miktar', '0')), str(row.get('Birim', ''))
             try:
                 skt_metni = str(row.get('SKT', ''))
                 if skt_metni and skt_metni != "-" and skt_metni.lower() != "nan":
-                    kalan = (datetime.strptime(skt_metni, '%Y-%m-%d').date() - datetime.now().date()).days
+                    kalan = (datetime.strptime(skt_metni, '%Y-%m-%d').date() - bugun).days
                     uyari = f"{urun} ({miktar} {birim})"
                     if kalan < 0:
                         st.error(f"❌ {uyari} - TARİHİ GEÇTİ! ({skt_metni})")
+                        telegram_raporu += f"❌ {uyari} - TARİHİ GEÇTİ!\n"
                         krt_sayisi += 1
                     elif 0 <= kalan <= 30:
                         st.warning(f"⚠️ {uyari} - SKT'ye {kalan} gün kaldı! ({skt_metni})")
+                        telegram_raporu += f"⚠️ {uyari} - {kalan} gün kaldı!\n"
                         krt_sayisi += 1
             except: pass
             try:
                 if float(miktar) <= float(str(row.get('Kritik Stok', '10')) or '10'):
                     st.error(f"📉 STOK ALARMI: {urun} bitmek üzere! (Kalan: {float(miktar)} {birim})")
+                    telegram_raporu += f"📉 ALARM: {urun} (Kalan: {float(miktar)} {birim})\n"
                     krt_sayisi += 1
             except: pass
 
         if krt_sayisi == 0: st.success("✅ Depo durumu çok iyi.")
-        
+        if st.button("📲 Telegram'a Rapor Gönder", type="primary"):
+            telegram_mesaj_gonder(telegram_raporu)
+            st.toast("✅ Gönderildi!")
+            
         st.divider()
+        st.markdown("### 📦 Stok Numarasına Göre Genel Toplamlar")
+        try:
+            df['Miktar_Sayi'] = pd.to_numeric(df['Miktar'], errors='coerce').fillna(0)
+            toplam_stok_df = df.groupby('Stok No').agg({'Ürün Adı': 'first', 'Miktar_Sayi': 'sum', 'Birim': 'first'}).reset_index()
+            toplam_stok_df.rename(columns={'Miktar_Sayi': 'Toplam Miktar'}, inplace=True)
+            st.dataframe(toplam_stok_df[['Stok No', 'Ürün Adı', 'Toplam Miktar', 'Birim']], use_container_width=True, hide_index=True)
+        except: st.info("Toplamlar hesaplanırken hata oluştu.")
+        
         st.markdown("### 🔍 Detaylı Parti Listesi")
-        st.dataframe(df.drop(columns=['Resim Yolu', 'GS_Row', 'Depo Sahibi', 'Firma'], errors='ignore'), use_container_width=True, hide_index=True)
+        st.dataframe(df.drop(columns=['Resim Yolu', 'Miktar_Sayi', 'GS_Row', 'Depo Sahibi', 'Firma'], errors='ignore'), use_container_width=True, hide_index=True)
+
+        if st.session_state['rol'] == 'admin':
+            st.divider()
+            st.markdown("### 📈 Firma Aktiflik ve Performans Analizi")
+            df_perf = hareketleri_getir()
+            if not df_perf.empty and 'Firma' in df_perf.columns:
+                c_g1, c_g2 = st.columns(2)
+                with c_g1:
+                    st.markdown("**Firmalara Göre Toplam İşlem Hacmi**")
+                    st.bar_chart(df_perf['Firma'].value_counts())
+                with c_g2:
+                    st.markdown("**Firmaların Son Görülme Zamanları**")
+                    son_gorme = df_perf.groupby('Firma')['Tarih'].max().reset_index()
+                    son_gorme.columns = ['Firma', 'Son İşlem Tarihi']
+                    st.dataframe(son_gorme.sort_values('Son İşlem Tarihi', ascending=False), use_container_width=True, hide_index=True)
 
     with sekme2:
         st.subheader("Depoya Yeni Ürün Ekle")
@@ -253,7 +284,7 @@ else:
                     giris = st.number_input("➕ Giriş:", min_value=0, step=1)
                 with c2: 
                     try: skt_v = datetime.strptime(str(urun.get('SKT', '')).strip(), '%Y-%m-%d').date()
-                    except: skt_v = datetime.now().date()
+                    except: skt_v = bugun
                     y_skt = st.date_input("SKT:", value=skt_v)
                 cb1, cb2 = st.columns(2)
                 if cb1.form_submit_button("💾 Güncelle", type="primary"):
@@ -288,11 +319,22 @@ else:
                             st.rerun()
 
     with sekme4:
-        st.subheader("🪪 Ürün Kartı")
+        st.subheader("🪪 Ürün Tanıtım Kartı ve Toplu Çıktı")
         if not df.empty:
-            secilen = st.selectbox("Kart:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
-            ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
-            st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}"), caption="QR Kod")
+            c_kart1, c_kart2 = st.columns(2)
+            with c_kart1:
+                st.markdown("**Tekli QR Kod**")
+                secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+                ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
+                st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
+            with c_kart2:
+                st.markdown("**Toplu QR Kod Çıktısı (A4)**")
+                html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo Barkodları</h2><div class='grid'>"
+                for _, row in df.iterrows():
+                    q_data = qr_olustur(f"Ürün: {str(row.get('Ürün Adı', ''))}\nStok No: {str(row.get('Stok No', ''))}")
+                    html_icerik += f"<div class='card'><div class='title'>{str(row.get('Ürün Adı', ''))}</div><div class='stok'>Stok No: {str(row.get('Stok No', ''))}</div><img src='data:image/png;base64,{base64.b64encode(q_data).decode()}'></div>"
+                html_icerik += "</div></body></html>"
+                st.download_button(label="📄 Yazdırılabilir Belgeyi İndir", data=html_icerik, file_name="MIDES_Barkodlar.html", mime="text/html", use_container_width=True)
 
     with sekme5:
         st.subheader("📝 Geçmiş")
@@ -356,10 +398,10 @@ else:
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı!")
                             else:
-                                genai.configure(api_key=gemini_api_key, transport="rest")
+                                genai.configure(api_key=gemini_api_key)
                                 
-                                # İŞTE EKRANDAKİ ÇÖZÜM: 'models/' kaldırıldı, sadece 3.5-flash eklendi
-                                model = genai.GenerativeModel('gemini-3.5-flash')
+                                # ÇALIŞAN YAPAY ZEKA BLOĞU BURADA! HİÇBİR ŞEKİLDE DOKUNULMADI.
+                                model = genai.GenerativeModel('models/gemini-3.5-flash')
                                 
                                 prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
                                 img = Image.open(resim_dosyasi)
