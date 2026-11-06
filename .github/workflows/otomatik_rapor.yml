@@ -2,19 +2,18 @@ name: Gunluk Telegram Raporu
 
 on:
   schedule:
-    # Türkiye Saati (UTC+3) ile 08:00'e denk gelmesi için UTC 05:00 yazıyoruz.
     - cron: '0 5 * * *'
-  workflow_dispatch: # Test için manuel çalıştırma butonu ekler
+  workflow_dispatch:
 
 jobs:
   rapor_gonder:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Kodlari Cek
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Python Kur
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
           
