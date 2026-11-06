@@ -323,43 +323,133 @@ else:
                     st.dataframe(son_gorme.sort_values('Son İşlem Tarihi', ascending=False), use_container_width=True, hide_index=True)
 
     with sekme2:
-        st.subheader("Depoya Yeni Ürün Ekle")
-        with st.form("urun_ekle_formu"):
-            col1, col2 = st.columns(2)
-            with col1:
-                stok_no = st.text_input("Stok Numarası (Barkod)")
-                urun_adi = st.text_input("Ürün Adı")
-                miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
-                birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket", "Koli"])
-                alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
-            with col2:
-                kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
-                uretim_tarihi = st.date_input("Üretim Tarihi")
-                skt = st.date_input("Son Kullanma Tarihi (SKT)")
-                st.markdown("---")
-                sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
-                sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
-                sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
-                sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
-                ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
-        if ekle_btn:
-            if urun_adi and stok_no:
-                bugun_tarih = datetime.now().strftime("%Y-%m-%d")
-                yeni_veri = {
-                    "stok_no": stok_no, "urun_adi": urun_adi, "miktar": miktar, "birim": birim,
-                    "eklenme_tarihi": bugun_tarih, "skt": str(skt), "uretim_tarihi": str(uretim_tarihi),
-                    "giris_tarihi": bugun_tarih, "resim_yolu": "", "kritik_stok": kritik_seviye,
-                    "alim_turu": alim_turu, "sozlesme_no": sozlesme_no if alim_turu == "Piyasa Alımı" else "-",
-                    "sozlesme_tarihi": str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-",
-                    "sozlesme_bitis_tarihi": str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-",
-                    "sozlesme_kritik": sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0,
-                    "firma": st.session_state['firma']
-                }
-                supabase.table(aktif_tablo).insert(yeni_veri).execute()
-                log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
-                st.success(f"✅ Ürün depoya başarıyla kaydedildi!")
-                st.rerun()
-            else: st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
+        st.subheader("➕ Depoya Yeni Ürün Ekle")
+        ekleme_yontemi = st.radio("Ürün Ekleme Yöntemi Seçiniz:", ["📝 Manuel Form ile Tek Tek Ekle", "📸 Yapay Zeka ile İrsaliye/Fatura Okut (Toplu Ekle)"], horizontal=True)
+
+        if "Manuel" in ekleme_yontemi:
+            with st.form("urun_ekle_formu"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    stok_no = st.text_input("Stok Numarası (Barkod)")
+                    urun_adi = st.text_input("Ürün Adı")
+                    miktar = st.number_input("Miktar", min_value=0.0, step=1.0)
+                    birim = st.selectbox("Birim", ["Kg", "Litre", "Adet", "Kutu", "Paket", "Koli"])
+                    alim_turu = st.selectbox("Alım Türü", ["Merkezi Alım", "Piyasa Alımı"])
+                with col2:
+                    kritik_seviye = st.number_input("Depo Kritik Uyarı Seviyesi", min_value=1, value=20)
+                    uretim_tarihi = st.date_input("Üretim Tarihi")
+                    skt = st.date_input("Son Kullanma Tarihi (SKT)")
+                    st.markdown("---")
+                    sozlesme_no = st.text_input("Sözleşme No (Sadece Piyasa Alımı İçin)")
+                    sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
+                    sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
+                    sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
+                    ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
+            if ekle_btn:
+                if urun_adi and stok_no:
+                    bugun_tarih = datetime.now().strftime("%Y-%m-%d")
+                    yeni_veri = {
+                        "stok_no": stok_no, "urun_adi": urun_adi, "miktar": miktar, "birim": birim,
+                        "eklenme_tarihi": bugun_tarih, "skt": str(skt), "uretim_tarihi": str(uretim_tarihi),
+                        "giris_tarihi": bugun_tarih, "resim_yolu": "", "kritik_stok": kritik_seviye,
+                        "alim_turu": alim_turu, "sozlesme_no": sozlesme_no if alim_turu == "Piyasa Alımı" else "-",
+                        "sozlesme_tarihi": str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-",
+                        "sozlesme_bitis_tarihi": str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-",
+                        "sozlesme_kritik": sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0,
+                        "firma": st.session_state['firma']
+                    }
+                    supabase.table(aktif_tablo).insert(yeni_veri).execute()
+                    log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
+                    st.success(f"✅ Ürün depoya başarıyla kaydedildi!")
+                    st.rerun()
+                else: st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
+        else:
+            st.info("💡 **Akıllı Mal Kabul:** Gelen ürünlerin irsaliyesini, faturasını veya listesini fotoğraflayın. Yapay zeka tüm listeyi sizin için saniyeler içinde okuyup tabloya dönüştürecektir.")
+            resim_dosyasi_giris = st.file_uploader("Fatura / Liste Fotoğrafı Yükleyin", type=['jpg', 'jpeg', 'png'], key="giris_foto")
+
+            if resim_dosyasi_giris:
+                if st.button("🤖 Yapay Zekaya Okut ve Listeyi Çıkar", type="primary", key="ai_giris_btn"):
+                    with st.spinner("Yapay Zeka fatura/listeyi inceliyor, lütfen bekleyin..."):
+                        try:
+                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+                            if not gemini_api_key:
+                                st.error("❌ Gemini API Anahtarı bulunamadı!")
+                            else:
+                                genai.configure(api_key=gemini_api_key)
+                                model = genai.GenerativeModel('gemini-3.5-flash')
+                                prompt = """Sen uzman bir depo mal kabul asistanısın. Gönderdiğim fotoğrafta depoya giren ürünlerin bir faturası, irsaliyesi veya listesi bulunuyor. Tablodaki ürünleri oku ve her bir satır için sadece şu bilgileri çıkar: 
+                                - 'Stok No' (eğer belgede barkod/kod yoksa tamamen boş bırak), 
+                                - 'Ürün Adı', 
+                                - 'Miktar' (sadece rakam),
+                                - 'Birim' (Kg, Litre, Adet vb.). 
+                                Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya açıklama ekleme. 
+                                Örnek Format: [{"Stok No": "8920270048540", "Ürün Adı": "Domates Salçası", "Miktar": "50", "Birim": "Kg"}]"""
+                                img = Image.open(resim_dosyasi_giris)
+                                response = model.generate_content([prompt, img])
+
+                                json_text = response.text.strip()
+                                if json_text.startswith("```json"): json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                elif json_text.startswith("```"): json_text = json_text.replace("```", "").strip()
+
+                                ai_data = json.loads(json_text)
+                                st.session_state['ai_giris_df'] = pd.DataFrame(ai_data)
+                                st.success("✅ Belge başarıyla okundu! Lütfen aşağıdaki tablodan verileri kontrol edip onaylayın.")
+                        except Exception as e:
+                            st.error(f"Sistem Hatası Detayı (Lütfen daha net bir fotoğraf deneyin): {str(e)}")
+
+            if 'ai_giris_df' in st.session_state and st.session_state['ai_giris_df'] is not None:
+                st.markdown("### 🔍 Okunan Ürünleri Düzenle ve Onayla")
+                st.warning("⚠️ Lütfen 'Stok No'su boş gelen ürünlere benzersiz bir numara yazın. Ayrıca sağ taraftan ürünlerin SKT'sini (Son Kullanma Tarihi) ayarlamayı unutmayın.")
+                
+                temp_df = st.session_state['ai_giris_df'].copy()
+                if 'SKT' not in temp_df.columns:
+                    temp_df['SKT'] = bugun.strftime('%Y-%m-%d')
+                if 'Kritik Stok' not in temp_df.columns:
+                    temp_df['Kritik Stok'] = 10
+                
+                with st.form("toplu_giris_onay"):
+                    duzenlenmis_giris = st.data_editor(temp_df, use_container_width=True, hide_index=True)
+                    if st.form_submit_button("💾 Seçili Ürünleri Depoya Ekle", type="primary"):
+                        zaman, k_adi, f_adi = datetime.now().strftime('%Y-%m-%d'), st.session_state['kullanici'], st.session_state.get('firma', '')
+                        eklenen_sayisi = 0
+                        
+                        for i, r in duzenlenmis_giris.iterrows():
+                            s_no = str(r.get('Stok No', '')).strip()
+                            u_adi = str(r.get('Ürün Adı', '')).strip()
+                            miktar_val = float(r.get('Miktar', 0) or 0)
+                            birim_val = str(r.get('Birim', 'Adet')).strip()
+                            skt_val = str(r.get('SKT', zaman)).strip()
+                            kritik_val = int(float(r.get('Kritik Stok', 10) or 10))
+                            
+                            if u_adi and miktar_val > 0 and s_no and s_no != "None" and s_no != "nan":
+                                mevcut_urun = pd.DataFrame()
+                                if not df.empty:
+                                    mevcut_urun = df[df['Stok No'].astype(str).str.strip() == s_no]
+                                
+                                if not mevcut_urun.empty:
+                                    eski_miktar = float(mevcut_urun.iloc[0]['Miktar'])
+                                    yeni_miktar = eski_miktar + miktar_val
+                                    urun_id = int(mevcut_urun.iloc[0]['ID'])
+                                    supabase.table(aktif_tablo).update({"miktar": yeni_miktar, "skt": skt_val}).eq("id", urun_id).execute()
+                                    log_kaydet(k_adi, "GİRİŞ", u_adi, miktar_val, "Yapay Zeka Toplu Ekleme")
+                                else:
+                                    yeni_veri = {
+                                        "stok_no": s_no, "urun_adi": u_adi, "miktar": miktar_val, "birim": birim_val,
+                                        "eklenme_tarihi": zaman, "skt": skt_val, "uretim_tarihi": zaman,
+                                        "giris_tarihi": zaman, "resim_yolu": "", "kritik_stok": kritik_val,
+                                        "alim_turu": "Merkezi Alım", "sozlesme_no": "-", "sozlesme_tarihi": "-",
+                                        "sozlesme_bitis_tarihi": "-", "sozlesme_kritik": 0.0, "firma": f_adi
+                                    }
+                                    supabase.table(aktif_tablo).insert(yeni_veri).execute()
+                                    log_kaydet(k_adi, "YENİ KAYIT", u_adi, miktar_val, "Yapay Zeka Toplu Ekleme")
+                                eklenen_sayisi += 1
+                        
+                        if eklenen_sayisi > 0:
+                            st.session_state['ai_giris_df'] = None
+                            st.success(f"✅ Harika! Toplam {eklenen_sayisi} kalem ürün deponuza başarıyla eklendi.")
+                            st.rerun()
+                        else:
+                            st.error("Hiçbir ürün eklenmedi. Lütfen ürünlerin Stok Numaralarının dolu olduğundan emin olun.")
 
     with sekme3:
         st.subheader("🔄 Ürün Bilgilerini Güncelle ve Sil")
@@ -566,7 +656,7 @@ else:
                     st.success("Duyuru güncellendi!")
                     st.rerun()
 
-    # --- GEMINI YAPAY ZEKA MODÜLÜ ---
+    # --- GEMINI YAPAY ZEKA MODÜLÜ (ÇIKIŞ) ---
     with sekme11:
         st.subheader("📂 Akıllı Toplu Çıkış İşlemi")
         giris_yontemi = st.radio("Listeyi Sisteme Nasıl Aktaracaksınız?", ["📸 Fotoğraf Çekerek (Yapay Zeka Okur)", "📥 Excel / CSV Dosyası Yükleyerek"], horizontal=True)
