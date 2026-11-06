@@ -357,37 +357,23 @@ else:
                                 st.error("❌ Gemini API Anahtarı bulunamadı!")
                             else:
                                 genai.configure(api_key=gemini_api_key)
+                                model = genai.GenerativeModel('gemini-1.5-flash')
                                 
                                 prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
+                                
                                 img = Image.open(resim_dosyasi)
+                                response = model.generate_content([prompt, img])
                                 
-                                # Google'ın tüm model varyasyonlarını otomatik deneyen fallback sistemi
-                                model_isimleri = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-1.5-flash-001', 'gemini-1.5-flash-002']
-                                basarili_okuma = False
-                                
-                                for m_isim in model_isimleri:
-                                    try:
-                                        model = genai.GenerativeModel(m_isim)
-                                        response = model.generate_content([prompt, img])
-                                        
-                                        json_text = response.text.strip()
-                                        if json_text.startswith("```json"): 
-                                            json_text = json_text.replace("```json", "").replace("```", "").strip()
-                                        elif json_text.startswith("```"):
-                                            json_text = json_text.replace("```", "").strip()
-                                        
-                                        ai_data = json.loads(json_text)
-                                        st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
-                                        st.success(f"✅ Tablo başarıyla okundu! (Kullanılan Model: {m_isim}) Aşağıdan onaylayabilirsiniz.")
-                                        basarili_okuma = True
-                                        break  # Başarılı olursa denemeyi bırak ve döngüden çık
-                                    except Exception as e:
-                                        continue  # Bu model ismi hata verirse bir sonrakini dene
-                                        
-                                if not basarili_okuma:
-                                    st.error("❌ Google sunucularındaki hiçbir model ismi bu anahtarla eşleşmedi. Lütfen yeni bir Google hesabıyla taze bir API anahtarı almayı deneyin.")
+                                json_text = response.text.strip()
+                                if json_text.startswith("```json"):
+                                    json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                    
+                                ai_data = json.loads(json_text)
+                                st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
+                                st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
                         except Exception as e:
-                            st.error(f"Sistem Hatası Detayı: {e}")
+                            st.error(f"🚨 GOOGLE'IN VERDİĞİ GERÇEK HATA: {str(e)}")
+                            st.info("Lütfen bu kırmızı hata mesajının fotoğrafını bana gönderin. Gerçek sorunun ne olduğunu bu mesaj söyleyecek.")
                 
                 if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
                     df_yuklenen = st.session_state['ai_okunan_df']
