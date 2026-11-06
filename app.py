@@ -15,13 +15,12 @@ import google.generativeai as genai
 from supabase import create_client, Client
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
-# --- SAYDAM ARKA PLAN AMBLEMİ (FİLİGRAN) ---
+
+# --- SAYDAM ARKA PLAN AMBLEMİ (TÜM SAYFALAR VE GİRİŞ EKRANI İÇİN) ---
 try:
-    import base64
     with open("amblem.png", "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
     
-    # CSS ile logoyu saydam (%7 opacity) ve tam ortada (.stApp ile) sabitliyoruz
     background_style = f"""
     <style>
     .stApp {{
@@ -32,7 +31,7 @@ try:
         background-attachment: fixed;
     }}
     
-    /* İçeriklerin okunabilirliği için arka plana saydam bir beyaz örtü ekler */
+    /* İçeriklerin okunabilirliği için arka plana çok hafif beyaz örtü */
     .stApp > header, .stApp > .main {{
         background-color: rgba(255, 255, 255, 0.93);
     }}
@@ -41,6 +40,7 @@ try:
     st.markdown(background_style, unsafe_allow_html=True)
 except Exception:
     pass
+
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
