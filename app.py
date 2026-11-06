@@ -157,12 +157,7 @@ if st.session_state['sifre_degistirme_modu']:
     st.stop()
 
 if not st.session_state['giris_yapildi']:
-    c_img1, c_img2, c_img3 = st.columns([2, 1, 2])
-    with c_img2:
-        try: st.image("amblem.png", use_container_width=True)
-        except: pass
-        
-    st.markdown("<h1 style='text-align: center;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 50px;'>🔐 MİDES Depo Yönetim Sistemi</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form"):
@@ -409,7 +404,16 @@ else:
                 
                 with st.form("toplu_giris_onay"):
                     duzenlenmis_giris = st.data_editor(temp_df, use_container_width=True, hide_index=True)
-                    if st.form_submit_button("💾 Seçili Ürünleri Depoya Ekle", type="primary"):
+                    
+                    c_btn1, c_btn2 = st.columns(2)
+                    submit_kaydet = c_btn1.form_submit_button("💾 Seçili Ürünleri Depoya Ekle", type="primary")
+                    submit_iptal = c_btn2.form_submit_button("❌ Listeyi İptal Et / Temizle")
+                    
+                    if submit_iptal:
+                        st.session_state['ai_giris_df'] = None
+                        st.rerun()
+
+                    if submit_kaydet:
                         zaman, k_adi, f_adi = datetime.now().strftime('%Y-%m-%d'), st.session_state['kullanici'], st.session_state.get('firma', '')
                         eklenen_sayisi = 0
                         
@@ -737,7 +741,16 @@ else:
                     
                     with st.form("toplu_onay_formu"):
                         duzenlenmis_df = st.data_editor(pd.DataFrame(onay_listesi), column_config={"Çıkış Miktarı": st.column_config.NumberColumn("✏️ Çıkış Miktarı", min_value=0.0, step=1.0), "ID": None}, disabled=["Stok No", "Ürün Adı", "İşlem SKT", "Mevcut Stok", "Kalan Stok", "Durum"], hide_index=True, use_container_width=True)
-                        if st.form_submit_button("💾 Onayla ve Düş", type="primary"):
+                        
+                        c_btn1, c_btn2 = st.columns(2)
+                        submit_dus = c_btn1.form_submit_button("💾 Onayla ve Düş", type="primary")
+                        submit_iptal = c_btn2.form_submit_button("❌ Listeyi İptal Et / Temizle")
+                        
+                        if submit_iptal:
+                            st.session_state['ai_okunan_df'] = None
+                            st.rerun()
+
+                        if submit_dus:
                             zaman, k_adi, f_adi = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), st.session_state['kullanici'], st.session_state.get('firma', '')
                             for i, r in duzenlenmis_df.iterrows():
                                 g_cik = float(r['Çıkış Miktarı'])
