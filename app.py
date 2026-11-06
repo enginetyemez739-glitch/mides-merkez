@@ -363,7 +363,7 @@ else:
                                 img = Image.open(resim_dosyasi)
                                 
                                 response = client_ai.models.generate_content(
-                                    model='gemini-1.5-flash',
+                                    model = genai.GenerativeModel('models/gemini-3.5-flash'),
                                     contents=[prompt, img]
                                 )
                                 
