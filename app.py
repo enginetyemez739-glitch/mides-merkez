@@ -13,13 +13,13 @@ import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
 import base64
+import google.generativeai as genai
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
-# --- AKILLI RAKAM TEMİZLEYİCİ (VİRGÜL/NOKTA HATALARINI ÇÖZER) ---
 def rakam_temizle(deger):
     try:
         if pd.isna(deger) or str(deger).strip() == "": return 0.0
@@ -34,14 +34,12 @@ def rakam_temizle(deger):
     except:
         return 0.0
 
-# --- GİZLİ KASA AYARLARI ---
 try:
     google_json_str = st.secrets["google_json"]
 except:
     st.error("Gizli kasa (Secrets) ayarları bulunamadı!")
     st.stop()
 
-# --- GOOGLE SHEETS BAĞLANTISI (ÖNBELLEKLİ) ---
 @st.cache_resource(ttl=600)
 def google_baglantisini_kur():
     scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -76,7 +74,7 @@ try:
     client, sheet, kullanici_tablosu, ws_gida, ws_temizlik, ws_hareket, ws_geri_bildirim, ws_duyuru = google_baglantisini_kur()
     df_kullanicilar = pd.DataFrame(kullanici_tablosu.get_all_records())
 except Exception as e:
-    st.error("Google sistemi anlık olarak çok fazla istek aldı. Lütfen 1 dakika bekleyip sayfayı yenileyin.")
+    st.error("Google sistemi anlık olarak çok fazla istek aldı. Lütfen sayfayı yenileyin.")
     st.stop()
 
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
@@ -133,7 +131,6 @@ def telegram_mesaj_gonder(mesaj):
             try: requests.post(url, data=payload)
             except: pass
 
-# --- YENİ OTURUM VE ŞİFRE YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
     st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
 
@@ -535,45 +532,28 @@ else:
                 if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
                     with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen 10-15 saniye bekleyin..."):
                         try:
-                            # Şifredeki tüm görünmez boşlukları ve satır atlamaları zorla temizliyoruz
-                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip().replace("\n", "").replace("\r", "")
+                            gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                             if not gemini_api_key:
                                 st.error("❌ Gemini API Anahtarı bulunamadı! Lütfen ayarlardan Secrets bölümüne GEMINI_API_KEY ekleyin.")
                             else:
-                                img_bytes = resim_dosyasi.getvalue()
-                                img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                                # Eski URL ve Header ayarları sildindi, doğrudan resmi paket kullanılıyor:
+                                genai.configure(api_key=gemini_api_key)
+                                model = genai.GenerativeModel('gemini-1.5-flash')
                                 
-                                # Adresi şifresiz, tertemiz ve orijinal 1.5 sürümüyle tanımlıyoruz
-                                api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+                                prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
                                 
-                                # Şifreyi adres yerine, güvenli başlık (header) içinde yolluyoruz
-                                headers = {
-                                    'Content-Type': 'application/json',
-                                    'x-goog-api-key': gemini_api_key
-                                }
-                                payload = {
-                                    "contents": [{
-                                        "parts": [
-                                            {"text": "Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{\"Stok No\": \"8920270048540\", \"Miktar\": \"25\"}]"},
-                                            {"inline_data": {"mime_type": "image/jpeg", "data": img_base64}}
-                                        ]
-                                    }]
-                                }
+                                img = Image.open(resim_dosyasi)
+                                response = model.generate_content([prompt, img])
                                 
-                                response = requests.post(api_url, headers=headers, json=payload)
-                                
-                                if response.status_code == 200:
-                                    json_text = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                                    if json_text.startswith("```json"):
-                                        json_text = json_text.replace("```json", "").replace("```", "").strip()
-                                        
-                                    ai_data = json.loads(json_text)
-                                    st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
-                                    st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
-                                else:
-                                    st.error(f"API Sunucu Hatası: {response.text}")
+                                json_text = response.text.strip()
+                                if json_text.startswith("```json"):
+                                    json_text = json_text.replace("```json", "").replace("```", "").strip()
+                                    
+                                ai_data = json.loads(json_text)
+                                st.session_state['ai_okunan_df'] = pd.DataFrame(ai_data)
+                                st.success("✅ Tablo başarıyla okundu! Aşağıdan onaylayabilirsiniz.")
                         except Exception as e:
-                            st.error(f"Fotoğraf okunurken hata oluştu. Detay: {e}")
+                            st.error(f"Fotoğraf okunurken hata oluştu. Lütfen fotoğrafın net olduğundan emin olun. Detay: {e}")
                 
                 if 'ai_okunan_df' in st.session_state and st.session_state['ai_okunan_df'] is not None:
                     df_yuklenen = st.session_state['ai_okunan_df']
