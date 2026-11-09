@@ -16,31 +16,6 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
-# --- SAYDAM ARKA PLAN AMBLEMİ (TÜM SAYFALAR VE GİRİŞ EKRANI İÇİN) ---
-try:
-    with open("amblem.png", "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode()
-    
-    background_style = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{encoded_string}");
-        background-size: min(65vw, 65vh);
-        background-repeat: no-repeat;
-        background-position: center;
-        background-attachment: fixed;
-    }}
-    
-    /* İçeriklerin okunabilirliği için arka plana çok hafif beyaz örtü */
-    .stApp > header, .stApp > .main {{
-        background-color: rgba(255, 255, 255, 0.93);
-    }}
-    </style>
-    """
-    st.markdown(background_style, unsafe_allow_html=True)
-except Exception:
-    pass
-
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
@@ -265,7 +240,7 @@ else:
     except Exception:
         pass
 
-    # YENİ SAYIM SEKMESİ EKLENDİ (sekme12)
+    # SAYIM SEKMESİ EKLİ DURUMDA
     if st.session_state['rol'] == 'admin':
         sekme1, sekme2, sekme3, sekme12, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10, sekme11 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "📋 Depo Sayımı", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru", "📂 Toplu Çıkış"])
     else:
@@ -524,7 +499,6 @@ else:
         if not df.empty:
             sayim_df = df[['ID', 'Stok No', 'Ürün Adı', 'Miktar', 'Birim']].copy()
             sayim_df.rename(columns={'Miktar': 'Sistemdeki Miktar'}, inplace=True)
-            # Kolaylık sağlaması için varsayılan olarak sistemdeki sayıyı getiriyoruz
             sayim_df['Raftaki Gerçek Sayı'] = sayim_df['Sistemdeki Miktar']
             
             with st.form("sayim_formu"):
@@ -550,10 +524,8 @@ else:
                 else:
                     st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi. İlgili ürünlerin stokları yeni sayıma göre güncellendi!")
                     
-                    # Eksik ve fazlayı ayırmak için Durum sütunu
                     fark_olanlar['Durum'] = fark_olanlar['Fark'].apply(lambda x: '📉 EKSİK' if x < 0 else '📈 FAZLA')
                     
-                    # Pandas ile tablo hücrelerini yeşil ve kırmızıya boyama kuralı
                     def color_sayim(val):
                         if isinstance(val, (int, float)):
                             if val < 0: return 'background-color: rgba(255, 75, 75, 0.75); color: white; font-weight: bold;'
@@ -565,7 +537,6 @@ else:
                     gosterim_df = fark_olanlar[['Stok No', 'Ürün Adı', 'Sistemdeki Miktar', 'Raftaki Gerçek Sayı', 'Fark', 'Durum', 'Birim']]
                     
                     try:
-                        # Streamlit/Pandas versiyon uyumluluğu için hem map hem applymap deniyoruz
                         if hasattr(gosterim_df.style, 'map'):
                             styled_df = gosterim_df.style.map(color_sayim, subset=['Fark', 'Durum'])
                         else:
@@ -574,7 +545,6 @@ else:
                     except:
                         st.dataframe(gosterim_df, use_container_width=True, hide_index=True)
                     
-                    # Veritabanı ve Log Güncelleme Döngüsü
                     zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     for _, row in fark_olanlar.iterrows():
                         urun_id = int(row['ID'])
