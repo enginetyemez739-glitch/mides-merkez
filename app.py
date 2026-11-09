@@ -51,7 +51,7 @@ def tablo_isimleri_degistir(df):
         "aciklama": "Açıklama", "kullanici_adi": "Kullanıcı Adı", "sifre": "Şifre",
         "yetki": "Yetki", "telegram_token": "Telegram Token", "chat_id": "Chat ID",
         "ilk_giris": "İlk Giriş", "son_guncelleme": "Son Güncelleme", "mesaj": "Mesaj",
-        "aktif": "Aktif", "tur": "Tür"
+        "aktif": "Aktif", "tur": "Tür", "sayim_eksigi": "Sayım Eksiği"
     }
     df.rename(columns=rename_dict, inplace=True)
     return df
@@ -217,6 +217,11 @@ else:
             depo_adi = "Temizlik Deposu"
 
     df = verileri_getir(aktif_tablo)
+    if not df.empty and 'Sayım Eksiği' not in df.columns:
+        df['Sayım Eksiği'] = 0.0
+    if not df.empty:
+        df['Sayım Eksiği'] = pd.to_numeric(df['Sayım Eksiği'], errors='coerce').fillna(0)
+        
     bugun = datetime.now().date()
                         
     c_ust1, c_ust2 = st.columns([4, 1])
@@ -240,7 +245,6 @@ else:
     except Exception:
         pass
 
-    # SAYIM SEKMESİ EKLİ DURUMDA
     if st.session_state['rol'] == 'admin':
         sekme1, sekme2, sekme3, sekme12, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10, sekme11 = st.tabs(["📊 Özet & Analiz", "➕ Ürün Ekle", "🔄 Güncelle / Sil", "📋 Depo Sayımı", "⚡ Hızlı İşlem", "🪪 Ürün Kartı", "📝 Geçmiş İşlemler", "📑 Sözleşmeler", "💬 Bildirimler", "👥 Kullanıcı Yönetimi", "📢 Duyuru", "📂 Toplu Çıkış"])
     else:
@@ -352,6 +356,7 @@ else:
                         "sozlesme_tarihi": str(sozlesme_tarihi) if alim_turu == "Piyasa Alımı" else "-",
                         "sozlesme_bitis_tarihi": str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-",
                         "sozlesme_kritik": sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0,
+                        "sayim_eksigi": 0,
                         "firma": st.session_state['firma']
                     }
                     supabase.table(aktif_tablo).insert(yeni_veri).execute()
@@ -443,7 +448,7 @@ else:
                                         "eklenme_tarihi": zaman, "skt": skt_val, "uretim_tarihi": zaman,
                                         "giris_tarihi": zaman, "resim_yolu": "", "kritik_stok": kritik_val,
                                         "alim_turu": "Merkezi Alım", "sozlesme_no": "-", "sozlesme_tarihi": "-",
-                                        "sozlesme_bitis_tarihi": "-", "sozlesme_kritik": 0.0, "firma": f_adi
+                                        "sozlesme_bitis_tarihi": "-", "sozlesme_kritik": 0.0, "sayim_eksigi": 0, "firma": f_adi
                                     }
                                     supabase.table(aktif_tablo).insert(yeni_veri).execute()
                                     log_kaydet(k_adi, "YENİ KAYIT", u_adi, miktar_val, "Yapay Zeka Toplu Ekleme")
@@ -491,14 +496,22 @@ else:
                     st.success(f"🗑️ Ürün depodan silindi!")
                     st.rerun()
 
-    # YENİ EKLENEN SAYIM BÖLÜMÜ
+    # GELİŞTİRİLMİŞ SAYIM VE EKSİK TAKİP MODÜLÜ
     with sekme12:
-        st.subheader("📋 Depo Sayımı ve Stok Mutabakatı")
-        st.info("Raflardaki gerçek ürün sayılarını 'Raftaki Gerçek Sayı' sütununa girin. Sistem eksik veya fazlayı otomatik tespit edip renklendirecek ve stoklarınızı eşitleyecektir.")
+        st.subheader("📋 Depo Sayımı ve Kalıcı Eksik Takibi")
         
         if not df.empty:
-            sayim_df = df[['ID', 'Stok No', 'Ürün Adı', 'Miktar', 'Birim']].copy()
-            sayim_df.rename(columns={'Miktar': 'Sistemdeki Miktar'}, inplace=True)
+            # 1. Kapatılmamış Eksikler Uyarı Tablosu
+            eksikler_df = df[df['Sayım Eksiği'] > 0]
+            if not eksikler_df.empty:
+                st.error("🚨 **DİKKAT - GEÇMİŞTEN KALAN EKSİKLER:** Aşağıdaki ürünler önceki sayımlarda eksik çıkmıştır ve henüz depoda bulunamamış/tamamlanmamıştır.")
+                st.dataframe(eksikler_df[['Stok No', 'Ürün Adı', 'Sayım Eksiği', 'Birim']], hide_index=True, use_container_width=True)
+                st.divider()
+
+            st.info("Raflardaki gerçek ürün sayılarını girin. Eksik çıkarsa 'Sayım Eksiği' olarak kalıcı kaydedilir. Eğer geçmişteki eksik ürünü bulup fazla girerseniz, eksik borcunuz otomatik kapanır.")
+            
+            sayim_df = df[['ID', 'Stok No', 'Ürün Adı', 'Miktar', 'Sayım Eksiği', 'Birim']].copy()
+            sayim_df.rename(columns={'Miktar': 'Sistemdeki Miktar', 'Sayım Eksiği': 'Bilinen Eksik Miktar'}, inplace=True)
             sayim_df['Raftaki Gerçek Sayı'] = sayim_df['Sistemdeki Miktar']
             
             with st.form("sayim_formu"):
@@ -508,42 +521,20 @@ else:
                     column_config={
                         "Raftaki Gerçek Sayı": st.column_config.NumberColumn("✏️ Raftaki Gerçek Sayı", min_value=0.0, step=1.0)
                     },
-                    disabled=["ID", "Stok No", "Ürün Adı", "Sistemdeki Miktar", "Birim"],
+                    disabled=["ID", "Stok No", "Ürün Adı", "Sistemdeki Miktar", "Bilinen Eksik Miktar", "Birim"],
                     hide_index=True,
                     use_container_width=True
                 )
-                
-                hesapla_btn = st.form_submit_button("💾 Farkları Hesapla ve Stokları Eşitle", type="primary")
+                hesapla_btn = st.form_submit_button("💾 Farkları Hesapla ve Stokları Güncelle", type="primary")
                 
             if hesapla_btn:
                 duzenlenmis_sayim['Fark'] = duzenlenmis_sayim['Raftaki Gerçek Sayı'] - duzenlenmis_sayim['Sistemdeki Miktar']
                 fark_olanlar = duzenlenmis_sayim[duzenlenmis_sayim['Fark'] != 0].copy()
                 
                 if fark_olanlar.empty:
-                    st.success("✅ Mükemmel! Yaptığınız fiziki sayım ile sistemdeki stoklar birebir eşleşiyor. Eksik veya fazla ürün yok.")
+                    st.success("✅ Mükemmel! Yaptığınız fiziki sayım ile sistemdeki stoklar birebir eşleşiyor. Yeni bir fark yok.")
                 else:
-                    st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi. İlgili ürünlerin stokları yeni sayıma göre güncellendi!")
-                    
-                    fark_olanlar['Durum'] = fark_olanlar['Fark'].apply(lambda x: '📉 EKSİK' if x < 0 else '📈 FAZLA')
-                    
-                    def color_sayim(val):
-                        if isinstance(val, (int, float)):
-                            if val < 0: return 'background-color: rgba(255, 75, 75, 0.75); color: white; font-weight: bold;'
-                            elif val > 0: return 'background-color: rgba(75, 255, 75, 0.75); color: black; font-weight: bold;'
-                        elif val == '📉 EKSİK': return 'color: red; font-weight: bold;'
-                        elif val == '📈 FAZLA': return 'color: green; font-weight: bold;'
-                        return ''
-
-                    gosterim_df = fark_olanlar[['Stok No', 'Ürün Adı', 'Sistemdeki Miktar', 'Raftaki Gerçek Sayı', 'Fark', 'Durum', 'Birim']]
-                    
-                    try:
-                        if hasattr(gosterim_df.style, 'map'):
-                            styled_df = gosterim_df.style.map(color_sayim, subset=['Fark', 'Durum'])
-                        else:
-                            styled_df = gosterim_df.style.applymap(color_sayim, subset=['Fark', 'Durum'])
-                        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-                    except:
-                        st.dataframe(gosterim_df, use_container_width=True, hide_index=True)
+                    st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi. İlgili ürünlerin stokları ve eksik hafızaları güncellendi!")
                     
                     zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     for _, row in fark_olanlar.iterrows():
@@ -551,14 +542,27 @@ else:
                         yeni_miktar = float(row['Raftaki Gerçek Sayı'])
                         fark = float(row['Fark'])
                         urun_adi = row['Ürün Adı']
+                        eski_eksik = float(row['Bilinen Eksik Miktar'])
                         
-                        supabase.table(aktif_tablo).update({"miktar": yeni_miktar}).eq("id", urun_id).execute()
+                        if fark < 0:
+                            yeni_eksik = eski_eksik + abs(fark)
+                            islem_tipi = "SAYIM EKSİĞİ (ÇIKIŞ)"
+                            aciklama = f"Sistem: {row['Sistemdeki Miktar']} | Sayım: {yeni_miktar} | Yeni oluşan eksik: {abs(fark)}"
+                        else:
+                            kapanan = min(eski_eksik, fark)
+                            yeni_eksik = eski_eksik - kapanan
+                            if kapanan > 0:
+                                islem_tipi = "EKSİK TAMAMLAMA (GİRİŞ)"
+                                aciklama = f"Önceki eksiklerden {kapanan} kadarı bulundu/tamamlandı."
+                            else:
+                                islem_tipi = "SAYIM FAZLASI (GİRİŞ)"
+                                aciklama = f"Sistemde {row['Sistemdeki Miktar']} görünüyordu, sayımda {yeni_miktar} (fazla) çıktı."
                         
-                        islem_tipi = "SAYIM FAZLASI (GİRİŞ)" if fark > 0 else "SAYIM EKSİĞİ (ÇIKIŞ)"
-                        aciklama = f"Sistemde {row['Sistemdeki Miktar']} görünüyordu, sayımda {yeni_miktar} çıktı."
+                        supabase.table(aktif_tablo).update({"miktar": yeni_miktar, "sayim_eksigi": yeni_eksik}).eq("id", urun_id).execute()
                         log_kaydet(st.session_state['kullanici'], islem_tipi, urun_adi, abs(fark), aciklama)
                         
-                    st.toast("✅ Veritabanı ve geçmiş kayıtları başarıyla güncellendi!")
+                    st.toast("✅ Veritabanı başarıyla güncellendi!")
+                    st.rerun()
         else:
             st.info("Depoda sayım yapılacak ürün bulunmuyor.")
 
