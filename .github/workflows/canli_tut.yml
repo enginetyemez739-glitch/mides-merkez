@@ -11,4 +11,4 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Sitenin Kapisini Cal (Ping)
-        run: curl -s https://mides-merkez-nfh67ss3asfzafgzna4gkk.streamlit.app > /dev/null
+        run: curl -s https://mides-merkez-nfh67ss3asfzafgzna4gkk.streamlit.app/ > /dev/null
