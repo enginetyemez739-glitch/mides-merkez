@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import os
 import qrcode
 from io import BytesIO
@@ -13,6 +13,9 @@ import hashlib
 import base64
 import google.generativeai as genai
 from supabase import create_client, Client
+
+# --- TÜRKİYE SAAT DİLİMİ (UTC+3) ---
+TR_TZ = timezone(timedelta(hours=3))
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
@@ -84,7 +87,7 @@ def hareketleri_getir():
 
 def log_kaydet(kullanici, islem_tipi, urun_adi, miktar, aciklama):
     try:
-        zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        zaman = datetime.now(TR_TZ).strftime('%Y-%m-%d %H:%M:%S')
         firma_adi = st.session_state.get('firma', 'Bilinmiyor')
         veri = {
             "tarih": zaman, "kullanici": kullanici, "islem": islem_tipi,
@@ -138,7 +141,7 @@ if st.session_state['sifre_degistirme_modu']:
         if st.form_submit_button("Şifreyi Güncelle", type="primary"):
             if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
                 kullanici_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].iloc[0]['ID'])
-                bugun = datetime.today().strftime('%Y-%m-%d')
+                bugun = datetime.now(TR_TZ).strftime('%Y-%m-%d')
                 yeni_sifre_hash = sifre_hashle(yeni_sifre)
                 
                 supabase.table('kullanicilar').update({
@@ -194,7 +197,7 @@ if not st.session_state['giris_yapildi']:
                             st.rerun()
                         else:
                             son_guncelleme = pd.to_datetime(kullanici['Son Güncelleme'].values[0], errors='coerce')
-                            if (datetime.today() - son_guncelleme).days >= 90: 
+                            if (datetime.now(TR_TZ).replace(tzinfo=None) - son_guncelleme).days >= 90: 
                                 st.session_state['sifre_degistirme_modu'] = True
                             else:
                                 st.session_state['giris_yapildi'] = True
@@ -222,7 +225,7 @@ else:
     if not df.empty:
         df['Sayım Eksiği'] = pd.to_numeric(df['Sayım Eksiği'], errors='coerce').fillna(0)
         
-    bugun = datetime.now().date()
+    bugun = datetime.now(TR_TZ).date()
                         
     c_ust1, c_ust2 = st.columns([4, 1])
     with c_ust1: st.title(f"📦 {st.session_state['firma']} - {depo_adi}")
@@ -347,7 +350,7 @@ else:
                     ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
             if ekle_btn:
                 if urun_adi and stok_no:
-                    bugun_tarih = datetime.now().strftime("%Y-%m-%d")
+                    bugun_tarih = datetime.now(TR_TZ).strftime("%Y-%m-%d")
                     yeni_veri = {
                         "stok_no": stok_no, "urun_adi": urun_adi, "miktar": miktar, "birim": birim,
                         "eklenme_tarihi": bugun_tarih, "skt": str(skt), "uretim_tarihi": str(uretim_tarihi),
@@ -420,7 +423,7 @@ else:
                         st.rerun()
 
                     if submit_kaydet:
-                        zaman, k_adi, f_adi = datetime.now().strftime('%Y-%m-%d'), st.session_state['kullanici'], st.session_state.get('firma', '')
+                        zaman, k_adi, f_adi = datetime.now(TR_TZ).strftime('%Y-%m-%d'), st.session_state['kullanici'], st.session_state.get('firma', '')
                         eklenen_sayisi = 0
                         
                         for i, r in duzenlenmis_giris.iterrows():
@@ -536,7 +539,7 @@ else:
                 else:
                     st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi. İlgili ürünlerin stokları ve eksik hafızaları güncellendi!")
                     
-                    zaman = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    zaman = datetime.now(TR_TZ).strftime('%Y-%m-%d %H:%M:%S')
                     for _, row in fark_olanlar.iterrows():
                         urun_id = int(row['ID'])
                         yeni_miktar = float(row['Raftaki Gerçek Sayı'])
@@ -621,7 +624,7 @@ else:
         df_gecmis = hareketleri_getir()
         if not df_gecmis.empty:
             st.dataframe(df_gecmis, use_container_width=True, hide_index=True)
-            st.download_button(label="📥 Raporu İndir (Excel/CSV)", data=df_gecmis.to_csv(index=False).encode('utf-8-sig'), file_name=f"Hareket_{datetime.now().strftime('%Y%m%d')}.csv", mime='text/csv')
+            st.download_button(label="📥 Raporu İndir (Excel/CSV)", data=df_gecmis.to_csv(index=False).encode('utf-8-sig'), file_name=f"Hareket_{datetime.now(TR_TZ).strftime('%Y%m%d')}.csv", mime='text/csv')
         else: st.info("Bu firmanın geçmiş bir hareketi bulunmamaktadır.")
             
     with sekme7:
@@ -675,7 +678,7 @@ else:
                                 "yetki": y_yetki, 
                                 "firma": y_firma, 
                                 "ilk_giris": "Evet",
-                                "son_guncelleme": datetime.now().strftime('%Y-%m-%d')
+                                "son_guncelleme": datetime.now(TR_TZ).strftime('%Y-%m-%d')
                             }).execute()
                             st.success(f"✅ Tebrikler! '{y_kadi}' adlı kullanıcı başarıyla eklendi.")
                         except Exception as e:
@@ -701,7 +704,7 @@ else:
                                 supabase.table('kullanicilar').update({
                                     "sifre": sifre_hashle(yeni_gecici_sifre),
                                     "ilk_giris": "Evet",
-                                    "son_guncelleme": datetime.now().strftime('%Y-%m-%d')
+                                    "son_guncelleme": datetime.now(TR_TZ).strftime('%Y-%m-%d')
                                 }).eq("id", hedef_id).execute()
                                 st.success(f"✅ Başarılı! '{secilen_kullanici}' hesabının şifresi sıfırlandı. İlk girişinde kendi şifresini belirlemeye zorlanacak.")
                             except Exception as e:
@@ -827,7 +830,7 @@ else:
                             st.rerun()
 
                         if submit_dus:
-                            zaman, k_adi, f_adi = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), st.session_state['kullanici'], st.session_state.get('firma', '')
+                            zaman, k_adi, f_adi = datetime.now(TR_TZ).strftime('%Y-%m-%d %H:%M:%S'), st.session_state['kullanici'], st.session_state.get('firma', '')
                             for i, r in duzenlenmis_df.iterrows():
                                 g_cik = float(r['Çıkış Miktarı'])
                                 if g_cik > 0:
