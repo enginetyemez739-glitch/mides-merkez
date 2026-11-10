@@ -1,0 +1,14 @@
+name: Sistemi Canli Tut
+
+on:
+  schedule:
+    # Her 6 saatte bir siteyi arka planda ziyaret eder
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Sitenin Kapisini Cal (Ping)
+        run: curl -s https://mides-merkez-nfh67ss3asfzafgzna4gkk.streamlit.app > /dev/null
