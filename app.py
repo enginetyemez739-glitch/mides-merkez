@@ -19,6 +19,94 @@ TR_TZ = timezone(timedelta(hours=3))
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
+# ==========================================
+# 🌟 DİJİTAL DÜNYA (CYBER-TECH) CSS TASARIMI
+# ==========================================
+dijital_css = """
+<style>
+/* Ana Arka Plan ve Metin Rengi (Koyu/Modern Tema) */
+.stApp {
+    background-color: #0b1121;
+    color: #e2e8f0;
+}
+
+/* Üst Menü ve Başlıklar */
+h1, h2, h3 {
+    color: #00f2fe !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+}
+
+/* Butonlar (Neon Yeşil/Mavi Etkili) */
+.stButton > button {
+    background: linear-gradient(45deg, #0ba360 0%, #3cba92 100%);
+    color: white !important;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(11, 163, 96, 0.4);
+    transition: all 0.3s ease;
+}
+.stButton > button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(11, 163, 96, 0.8);
+    border: none;
+}
+
+/* Sekmeler (Tabs) Dijital Görünüm */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: #111827;
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+.stTabs [data-baseweb="tab"] {
+    background-color: #1f2937;
+    border-radius: 8px;
+    border: 1px solid #374151;
+    color: #9ca3af;
+    padding: 8px 16px;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(90deg, #0ba360 0%, #00f2fe 100%) !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.5);
+    font-weight: bold;
+}
+
+/* Form Elemanları (Giriş Kutuları) */
+.stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
+    background-color: #1e293b !important;
+    color: #00f2fe !important;
+    border: 1px solid #334155 !important;
+    border-radius: 8px !important;
+}
+.stTextInput input:focus, .stNumberInput input:focus {
+    border-color: #0ba360 !important;
+    box-shadow: 0 0 12px rgba(11, 163, 96, 0.6) !important;
+}
+
+/* Uyarı ve Bilgi Kutuları */
+.stAlert {
+    border-radius: 10px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Dataframe (Tablo) Gölgelendirmesi */
+[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid #334155;
+}
+</style>
+"""
+st.markdown(dijital_css, unsafe_allow_html=True)
+# ==========================================
+
+
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
 
@@ -138,7 +226,7 @@ if st.session_state['sifre_degistirme_modu']:
         yeni_sifre = st.text_input("Yeni Şifre:", type="password")
         yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar):", type="password")
         
-        if st.form_submit_button("Şifreyi Güncelle", type="primary"):
+        if st.form_submit_button("Şifreyi Güncelle"):
             if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
                 kullanici_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].iloc[0]['ID'])
                 bugun = datetime.now(TR_TZ).strftime('%Y-%m-%d')
@@ -290,7 +378,7 @@ else:
                 except: pass
 
         if krt_sayisi == 0: st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
-        if st.button("📲 Telegram'a Rapor Gönder", type="primary"):
+        if st.button("📲 Telegram'a Rapor Gönder"):
             telegram_mesaj_gonder(telegram_raporu)
             st.toast("✅ Gönderildi!")
             
@@ -347,7 +435,7 @@ else:
                     sozlesme_tarihi = st.date_input("Sözleşme Tarihi")
                     sozlesme_bitis = st.date_input("Sözleşme Bitiş Tarihi")
                     sozlesme_kritik = st.number_input("Sözleşme / Yıllık Kritik Sınırı", min_value=0.0, value=20.0, step=1.0)
-                    ekle_btn = st.form_submit_button("Ürünü Kaydet", use_container_width=True)
+                    ekle_btn = st.form_submit_button("Ürünü Kaydet")
             if ekle_btn:
                 if urun_adi and stok_no:
                     bugun_tarih = datetime.now(TR_TZ).strftime("%Y-%m-%d")
@@ -372,7 +460,7 @@ else:
             resim_dosyasi_giris = st.file_uploader("Fatura / Liste Fotoğrafı Yükleyin", type=['jpg', 'jpeg', 'png'], key="giris_foto")
 
             if resim_dosyasi_giris:
-                if st.button("🤖 Yapay Zekaya Okut ve Listeyi Çıkar", type="primary", key="ai_giris_btn"):
+                if st.button("🤖 Yapay Zekaya Okut ve Listeyi Çıkar"):
                     with st.spinner("Yapay Zeka fatura/listeyi inceliyor, lütfen bekleyin..."):
                         try:
                             gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
@@ -415,7 +503,7 @@ else:
                     duzenlenmis_giris = st.data_editor(temp_df, use_container_width=True, hide_index=True)
                     
                     c_btn1, c_btn2 = st.columns(2)
-                    submit_kaydet = c_btn1.form_submit_button("💾 Seçili Ürünleri Depoya Ekle", type="primary")
+                    submit_kaydet = c_btn1.form_submit_button("💾 Seçili Ürünleri Depoya Ekle")
                     submit_iptal = c_btn2.form_submit_button("❌ Listeyi İptal Et / Temizle")
                     
                     if submit_iptal:
@@ -483,7 +571,7 @@ else:
                     y_skt = st.date_input("SKT:", value=skt_val)
                     y_kritik = st.number_input("Depo Kritik Sınır:", value=int(float(str(urun.get('Kritik Stok', '10')).strip() or '10')), step=1)
                 c_btn1, c_btn2 = st.columns(2)
-                if c_btn1.form_submit_button("💾 Güncellemeyi Kaydet", type="primary"):
+                if c_btn1.form_submit_button("💾 Güncellemeyi Kaydet"):
                     yeni_miktar = urun_miktar - cikis + giris
                     supabase.table(aktif_tablo).update({
                         "stok_no": yeni_stok, "miktar": yeni_miktar, "skt": y_skt.strftime('%Y-%m-%d'), "kritik_stok": y_kritik
@@ -528,7 +616,7 @@ else:
                     hide_index=True,
                     use_container_width=True
                 )
-                hesapla_btn = st.form_submit_button("💾 Farkları Hesapla ve Stokları Güncelle", type="primary")
+                hesapla_btn = st.form_submit_button("💾 Farkları Hesapla ve Stokları Güncelle")
                 
             if hesapla_btn:
                 duzenlenmis_sayim['Fark'] = duzenlenmis_sayim['Raftaki Gerçek Sayı'] - duzenlenmis_sayim['Sistemdeki Miktar']
@@ -589,7 +677,7 @@ else:
                 with st.form("hizli"):
                     m_dus = st.number_input("➖ Çıkar:", min_value=0, step=1)
                     m_ekle = st.number_input("➕ Ekle:", min_value=0, step=1)
-                    if st.form_submit_button("💾 Güncelle", type="primary"):
+                    if st.form_submit_button("💾 Güncelle"):
                         if m_dus > 0 or m_ekle > 0:
                             guncel_id = int(eslesen.iloc[0]['ID'])
                             yeni_m = int(eslesen.iloc[0]['Miktar']) - m_dus + m_ekle
@@ -639,7 +727,7 @@ else:
         with st.form("geri_bildirim_formu"):
             tur = st.selectbox("Bildirim Türü", ["Hata Bildirimi", "Soru / Talep"])
             mesaj = st.text_area("Mesajınız:")
-            if st.form_submit_button("Gönder", use_container_width=True) and mesaj.strip():
+            if st.form_submit_button("Gönder") and mesaj.strip():
                 supabase.table('geri_bildirimler').insert({
                     "kullanici": st.session_state['kullanici'], "tur": tur,
                     "mesaj": mesaj, "firma": st.session_state.get('firma', 'Bilinmiyor')
@@ -669,7 +757,7 @@ else:
                 with c_h3: 
                     y_firma = st.text_input("Bağlı Olduğu Firma (Örn: X Birliği)")
                 
-                if st.form_submit_button("Kullanıcı Oluştur", type="primary"):
+                if st.form_submit_button("Kullanıcı Oluştur"):
                     if y_kadi and y_sifre and y_firma:
                         try:
                             supabase.table('kullanicilar').insert({
@@ -729,7 +817,7 @@ else:
             with st.form("duyuru_formu"):
                 d_mesaj = st.text_area("Duyuru Mesajınız:", value=mevcut_mesaj)
                 d_aktif = st.checkbox("Duyuruyu Aktif Et (Herkes görsün)", value=mevcut_aktif_mi)
-                if st.form_submit_button("Kaydet", type="primary"):
+                if st.form_submit_button("Kaydet"):
                     yeni_durum = "Evet" if d_aktif else "Hayır"
                     if not res_d.data:
                         supabase.table('duyurular').insert({"mesaj": d_mesaj, "aktif": yeni_durum}).execute()
@@ -750,7 +838,7 @@ else:
             resim_dosyasi = st.file_uploader("Kamera ile çekin veya galeriden seçin", type=['jpg', 'jpeg', 'png'])
             
             if resim_dosyasi:
-                if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur", type="primary"):
+                if st.button("🤖 Yapay Zekaya Okut ve Tablo Oluştur"):
                     with st.spinner("Yapay Zeka tabloyu çözümlüyor, lütfen bekleyin..."):
                         try:
                             gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
@@ -822,7 +910,7 @@ else:
                         duzenlenmis_df = st.data_editor(pd.DataFrame(onay_listesi), column_config={"Çıkış Miktarı": st.column_config.NumberColumn("✏️ Çıkış Miktarı", min_value=0.0, step=1.0), "ID": None}, disabled=["Stok No", "Ürün Adı", "İşlem SKT", "Mevcut Stok", "Kalan Stok", "Durum"], hide_index=True, use_container_width=True)
                         
                         c_btn1, c_btn2 = st.columns(2)
-                        submit_dus = c_btn1.form_submit_button("💾 Onayla ve Düş", type="primary")
+                        submit_dus = c_btn1.form_submit_button("💾 Onayla ve Düş")
                         submit_iptal = c_btn2.form_submit_button("❌ Listeyi İptal Et / Temizle")
                         
                         if submit_iptal:
