@@ -19,92 +19,105 @@ TR_TZ = timezone(timedelta(hours=3))
 
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
-# ==========================================
-# 🌟 DİJİTAL DÜNYA (CYBER-TECH) CSS TASARIMI
-# ==========================================
-dijital_css = """
+# ==========================================================
+# 🚀 MİDES CYBER-COMMAND CENTER (GELİŞMİŞ DİJİTAL DÜNYA) CSS
+# ==========================================================
+cyber_css = """
 <style>
-/* Ana Arka Plan ve Metin Rengi (Koyu/Modern Tema) */
+/* Ana Arka Plan - Derin Uzay / Komuta Merkezi Mavisi */
 .stApp {
-    background-color: #0b1121;
-    color: #e2e8f0;
+    background: radial-gradient(circle at 50% 20%, #0f172a 0%, #070a13 100%);
+    color: #f8fafc;
 }
 
-/* Üst Menü ve Başlıklar */
+/* Başlıklar - Neon Mavi Hologram Efekti */
 h1, h2, h3 {
-    color: #00f2fe !important;
-    font-weight: 700 !important;
-    text-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+    color: #38bdf8 !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
 }
 
-/* Butonlar (Neon Yeşil/Mavi Etkili) */
+/* Kartlar ve Konteynerler - Cam Efekti (Glassmorphism) */
+div[data-testid="stForm"], div.block-container > div {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Butonlar - Siber Yeşil Neon */
 .stButton > button {
-    background: linear-gradient(45deg, #0ba360 0%, #3cba92 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white !important;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(11, 163, 96, 0.4);
-    transition: all 0.3s ease;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 10px;
+    font-weight: 700;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .stButton > button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(11, 163, 96, 0.8);
-    border: none;
+    transform: translateY(-2px);
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8);
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
 
-/* Sekmeler (Tabs) Dijital Görünüm */
+/* Üst Sekmeler - Dijital Konsol Görünümü */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    background-color: #111827;
-    padding: 10px;
-    border-radius: 12px;
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    gap: 10px;
+    background-color: rgba(15, 23, 42, 0.9);
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(56, 189, 248, 0.15);
 }
 .stTabs [data-baseweb="tab"] {
-    background-color: #1f2937;
+    background-color: rgba(30, 41, 59, 0.6);
     border-radius: 8px;
-    border: 1px solid #374151;
-    color: #9ca3af;
-    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+    padding: 10px 18px;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 .stTabs [aria-selected="true"] {
-    background: linear-gradient(90deg, #0ba360 0%, #00f2fe 100%) !important;
+    background: linear-gradient(135deg, #0284c7 0%, #10b981 100%) !important;
     color: white !important;
-    border: none !important;
-    box-shadow: 0 0 15px rgba(0, 242, 254, 0.5);
-    font-weight: bold;
+    border: 1px solid rgba(56, 189, 248, 0.5) !important;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+    text-shadow: 0 0 5px rgba(255,255,255,0.5);
 }
 
-/* Form Elemanları (Giriş Kutuları) */
+/* Metin Kutuları ve Form Elemanları */
 .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background-color: #1e293b !important;
-    color: #00f2fe !important;
-    border: 1px solid #334155 !important;
-    border-radius: 8px !important;
+    background-color: rgba(15, 23, 42, 0.8) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    border-radius: 10px !important;
 }
 .stTextInput input:focus, .stNumberInput input:focus {
-    border-color: #0ba360 !important;
-    box-shadow: 0 0 12px rgba(11, 163, 96, 0.6) !important;
+    border-color: #10b981 !important;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.5) !important;
 }
 
-/* Uyarı ve Bilgi Kutuları */
-.stAlert {
-    border-radius: 10px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Dataframe (Tablo) Gölgelendirmesi */
+/* Veri Tabloları (Dataframe) */
 [data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    border: 1px solid #334155;
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+/* Uyarı Kutuları */
+.stAlert {
+    border-radius: 12px !important;
+    background-color: rgba(30, 41, 59, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 </style>
 """
-st.markdown(dijital_css, unsafe_allow_html=True)
-# ==========================================
+st.markdown(cyber_css, unsafe_allow_html=True)
+# ==========================================================
 
 
 def sifre_hashle(sifre):
@@ -592,7 +605,6 @@ else:
         st.subheader("📋 Depo Sayımı ve Kalıcı Eksik Takibi")
         
         if not df.empty:
-            # 1. Kapatılmamış Eksikler Uyarı Tablosu
             eksikler_df = df[df['Sayım Eksiği'] > 0]
             if not eksikler_df.empty:
                 st.error("🚨 **DİKKAT - GEÇMİŞTEN KALAN EKSİKLER:** Aşağıdaki ürünler önceki sayımlarda eksik çıkmıştır ve henüz depoda bulunamamış/tamamlanmamıştır.")
