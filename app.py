@@ -13,6 +13,9 @@ import hashlib
 import base64
 import barcode
 from barcode.writer import ImageWriter
+import schedule
+import time
+import threading
 import google.generativeai as genai
 from supabase import create_client, Client
 
@@ -26,7 +29,6 @@ st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout
 # ==========================================================
 responsive_css = """
 <style>
-/* Sekmelerin mobilde kaydırılabilir ve şık durması için */
 .stTabs [data-baseweb="tab-list"] {
     gap: 8px;
     padding: 8px;
@@ -75,7 +77,6 @@ except Exception as e:
     st.error(f"⚠️ Supabase bağlantı kurulum hatası: {e}")
     st.stop()
 
-# --- VERİTABANI İŞLEM FONKSİYONLARI ---
 def tablo_isimleri_degistir(df):
     rename_dict = {
         "id": "ID", "stok_no": "Stok No", "urun_adi": "Ürün Adı", "miktar": "Miktar",
@@ -150,15 +151,70 @@ def barkod_olustur(metin):
     except Exception:
         return None
 
+def telegram_mesaj_gonder_tokenli(token, chat_id, mesaj):
+    if token and chat_id and str(token).lower() != "nan" and str(chat_id).lower() != "nan":
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": mesaj}
+        try: requests.post(url, data=payload)
+        except: pass
+
 def telegram_mesaj_gonder(mesaj):
     if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
-        token = st.session_state['telegram_token']
-        chat_id = st.session_state['telegram_chat_id']
-        if token and chat_id and str(token).lower() != "nan" and str(chat_id).lower() != "nan":
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": mesaj}
-            try: requests.post(url, data=payload)
-            except: pass
+        telegram_mesaj_gonder_tokenli(st.session_state['telegram_token'], st.session_state['telegram_chat_id'], mesaj)
+
+# --- OTOMATİK ZAMANLAYICI (HER GÜN SAAT 08:00) ---
+def otomatik_0800_kontrol_islevi():
+    try:
+        bugun = datetime.now(TR_TZ).date()
+        for tablo in ['gida_deposu', 'temizlik_deposu']:
+            res = supabase.table(tablo).select("*").execute()
+            if not res.data: continue
+            df_auto = pd.DataFrame(res.data)
+            df_auto = tablo_isimleri_degistir(df_auto)
+            
+            rapor = f"⏰ OTOMATİK 08:00 RAPORU ({tablo.upper()})\n\n"
+            kurtarici = 0
+            for _, row in df_auto.iterrows():
+                u_adi = str(row.get('Ürün Adı', ''))
+                mik = float(row.get('Miktar', 0) or 0)
+                krit = float(row.get('Kritik Stok', 10) or 10)
+                skt_str = str(row.get('SKT', ''))
+                
+                if mik <= krit:
+                    rapor += f"📉 ALARM: {u_adi} (Kalan: {mik})\n"
+                    kurtarici += 1
+                try:
+                    if skt_str and skt_str != "-":
+                        skt_tarih = datetime.strptime(skt_str, '%Y-%m-%d').date()
+                        kalan_gun = (skt_tarih - bugun).days
+                        if kalan_gun <= 30:
+                            rapor += f"⚠️ SKT UYARI: {u_adi} ({kalan_gun} gün kaldı)\n"
+                            kurtarici += 1
+                except: pass
+                
+            if kurtarici > 0:
+                # Kayıtlı kullanıcıların telegram bilgilerine gönder
+                k_res = supabase.table('kullanicilar').select("telegram_token, chat_id, firma").execute()
+                if k_res.data:
+                    for k in k_res.data:
+                        t_token = k.get('telegram_token')
+                        t_chat = k.get('chat_id')
+                        if t_token and t_chat:
+                            telegram_mesaj_gonder_tokenli(t_token, t_chat, rapor)
+    except Exception as e:
+        print(f"Zamanlayıcı Hatası: {e}")
+
+def arka_plan_zamanlayici_baslat():
+    schedule.every().day.at("08:00").do(otomatik_0800_kontrol_islevi)
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# Arka plan iş parçacığını bir kez başlat
+if 'zamanlayici_basladi' not in st.session_state:
+    st.session_state['zamanlayici_basladi'] = True
+    t = threading.Thread(target=arka_plan_zamanlayici_baslat, daemon=True)
+    t.start()
 
 # --- OTURUM YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
@@ -168,14 +224,14 @@ try:
     kullanicilar_res = supabase.table('kullanicilar').select("*").execute()
     df_kullanicilar = tablo_isimleri_degistir(pd.DataFrame(kullanicilar_res.data)) if kullanicilar_res.data else pd.DataFrame()
 except Exception as e:
-    st.error(f"🚨 Supabase veritabanına bağlanılamadı! Detay: {e}")
+    st.error(f"🚨 Supabase bağlantı hatası: {e}")
     st.stop()
 
 if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'): 
-        st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için kendi güvenli şifrenizi belirleyin.")
+        st.warning("⚠️ İlk giriş! Lütfen yeni güvenli şifrenizi belirleyin.")
     else: 
-        st.warning("⚠️ Şifrenizin 90 günlük kullanım süresi dolmuş veya değişiklik talep ettiniz. Lütfen yeni şifre belirleyin.")
+        st.warning("⚠️ Şifre süresi doldu. Lütfen yeni şifre belirleyin.")
         
     with st.form("sifre_degistir_formu"):
         yeni_sifre = st.text_input("Yeni Şifre:", type="password")
@@ -185,21 +241,13 @@ if st.session_state['sifre_degistirme_modu']:
             if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
                 kullanici_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].iloc[0]['ID'])
                 bugun = datetime.now(TR_TZ).strftime('%Y-%m-%d')
-                yeni_sifre_hash = sifre_hashle(yeni_sifre)
-                
                 supabase.table('kullanicilar').update({
-                    "sifre": yeni_sifre_hash,
-                    "son_guncelleme": bugun,
-                    "ilk_giris": "Hayır"
+                    "sifre": sifre_hashle(yeni_sifre), "son_guncelleme": bugun, "ilk_giris": "Hayır"
                 }).eq("id", kullanici_id).execute()
-                    
-                st.success("✅ Şifreniz başarıyla güncellendi! Lütfen sayfayı yenileyerek yeni şifrenizle giriş yapın.")
-                st.session_state['sifre_degistirme_modu'] = False
-                st.session_state['giris_yapildi'] = False
-                st.session_state['ilk_giris_uyarisi'] = False
+                st.success("✅ Şifre güncellendi! Yeniden giriş yapın.")
+                st.session_state.update({'sifre_degistirme_modu': False, 'giris_yapildi': False, 'ilk_giris_uyarisi': False})
                 st.stop()
-            else: 
-                st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+            else: st.error("Şifreler uyuşmuyor veya çok kısa.")
     st.stop()
 
 if not st.session_state['giris_yapildi']:
@@ -211,7 +259,7 @@ if not st.session_state['giris_yapildi']:
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 if df_kullanicilar.empty:
-                    st.error("Veritabanında kayıtlı kullanıcı bulunamadı!")
+                    st.error("Kullanıcı bulunamadı!")
                     st.stop()
                 
                 girilen_hash = sifre_hashle(sifre_input)
@@ -333,9 +381,10 @@ else:
                 except: pass
 
         if krt_sayisi == 0: st.success("✅ Depo durumu çok iyi. Tarihi yaklaşan veya stoğu tükenen ürün yok.")
-        if st.button("📲 Telegram'a Rapor Gönder"):
+        
+        if st.button("📲 Telegram'a Manuel Rapor Gönder"):
             telegram_mesaj_gonder(telegram_raporu)
-            st.toast("✅ Gönderildi!")
+            st.toast("✅ Telegram'a Gönderildi!")
             
         st.divider()
         st.markdown("### 📦 Stok Numarasına Göre Genel Toplamlar")
