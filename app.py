@@ -11,6 +11,8 @@ import numpy as np
 import json
 import hashlib
 import base64
+import barcode
+from barcode.writer import ImageWriter
 import google.generativeai as genai
 from supabase import create_client, Client
 
@@ -20,105 +22,36 @@ TR_TZ = timezone(timedelta(hours=3))
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
 # ==========================================================
-# 🚀 MİDES CYBER-COMMAND CENTER (GELİŞMİŞ DİJİTAL DÜNYA) CSS
+# 🚀 MİDES AKILLI TEMA (LIGHT & DARK MOD UYUMLU CSS)
 # ==========================================================
-cyber_css = """
+responsive_css = """
 <style>
-/* Ana Arka Plan - Derin Uzay / Komuta Merkezi Mavisi */
-.stApp {
-    background: radial-gradient(circle at 50% 20%, #0f172a 0%, #070a13 100%);
-    color: #f8fafc;
-}
-
-/* Başlıklar - Neon Mavi Hologram Efekti */
-h1, h2, h3 {
-    color: #38bdf8 !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
-}
-
-/* Kartlar ve Konteynerler - Cam Efekti (Glassmorphism) */
-div[data-testid="stForm"], div.block-container > div {
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    border-radius: 14px;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-/* Butonlar - Siber Yeşil Neon */
-.stButton > button {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white !important;
-    border: 1px solid rgba(16, 185, 129, 0.4);
-    border-radius: 10px;
-    font-weight: 700;
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8);
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-}
-
-/* Üst Sekmeler - Dijital Konsol Görünümü */
+/* Sekmelerin mobilde kaydırılabilir ve şık durması için */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 10px;
-    background-color: rgba(15, 23, 42, 0.9);
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(56, 189, 248, 0.15);
+    gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    overflow-x: auto;
 }
 .stTabs [data-baseweb="tab"] {
-    background-color: rgba(30, 41, 59, 0.6);
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #94a3b8;
-    padding: 10px 18px;
     font-weight: 600;
-    transition: all 0.2s ease;
+    padding: 8px 16px;
 }
-.stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, #0284c7 0%, #10b981 100%) !important;
-    color: white !important;
-    border: 1px solid rgba(56, 189, 248, 0.5) !important;
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
-    text-shadow: 0 0 5px rgba(255,255,255,0.5);
-}
-
-/* Metin Kutuları ve Form Elemanları */
-.stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background-color: rgba(15, 23, 42, 0.8) !important;
-    color: #38bdf8 !important;
-    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+.stButton > button {
     border-radius: 10px !important;
+    font-weight: 700 !important;
 }
-.stTextInput input:focus, .stNumberInput input:focus {
-    border-color: #10b981 !important;
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.5) !important;
-}
-
-/* Veri Tabloları (Dataframe) */
 [data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(56, 189, 248, 0.2);
 }
-
-/* Uyarı Kutuları */
 .stAlert {
     border-radius: 12px !important;
-    background-color: rgba(30, 41, 59, 0.9) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 </style>
 """
-st.markdown(cyber_css, unsafe_allow_html=True)
-# ==========================================================
-
+st.markdown(responsive_css, unsafe_allow_html=True)
 
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
@@ -207,6 +140,16 @@ def qr_olustur(metin):
     img.save(buf, format="PNG")
     return buf.getvalue()
 
+def barkod_olustur(metin):
+    try:
+        rv = barcode.get('code128', str(metin), writer=ImageWriter())
+        buf = BytesIO()
+        rv.write(buf, options={'write_text': True, 'dpi': 200, 'module_width': 0.5, 'module_height': 8.0})
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception:
+        return None
+
 def telegram_mesaj_gonder(mesaj):
     if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
         token = st.session_state['telegram_token']
@@ -226,7 +169,6 @@ try:
     df_kullanicilar = tablo_isimleri_degistir(pd.DataFrame(kullanicilar_res.data)) if kullanicilar_res.data else pd.DataFrame()
 except Exception as e:
     st.error(f"🚨 Supabase veritabanına bağlanılamadı! Detay: {e}")
-    st.info("Lütfen Secrets bölümündeki SUPABASE_URL ve SUPABASE_KEY değerlerini kontrol edin.")
     st.stop()
 
 if st.session_state['sifre_degistirme_modu']:
@@ -269,7 +211,7 @@ if not st.session_state['giris_yapildi']:
             sifre_input = st.text_input("Şifre", type="password")
             if st.form_submit_button("Giriş Yap", use_container_width=True):
                 if df_kullanicilar.empty:
-                    st.error("Veritabanında kayıtlı kullanıcı bulunamadı! SQL Editor üzerinden admin kullanıcısını eklediğinizden emin olun.")
+                    st.error("Veritabanında kayıtlı kullanıcı bulunamadı!")
                     st.stop()
                 
                 girilen_hash = sifre_hashle(sifre_input)
@@ -702,22 +644,44 @@ else:
             else: st.error("❌ Ürün deponuzda bulunamadı.")
 
     with sekme4:
-        st.subheader("🪪 Ürün Tanıtım Kartı ve Toplu Çıktı")
+        st.subheader("🪪 Raf Etiketleri (QR & Çizgili Barkod Birlikte)")
         if not df.empty:
             c_kart1, c_kart2 = st.columns(2)
             with c_kart1:
-                st.markdown("**Tekli QR Kod**")
-                secilen = st.selectbox("Kartı Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
+                st.markdown("**Tekli Ürün Etiketi**")
+                secilen = st.selectbox("Etiket Göster:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
                 ub = df[df['ID'] == int(secilen.split(" - ")[0])].iloc[0]
-                st.image(qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}\nMiktar: {ub['Miktar']}\nSKT: {ub['SKT']}"), caption="QR Kod")
+                
+                qr_bytes = qr_olustur(f"Ürün: {ub['Ürün Adı']}\nStok No: {ub['Stok No']}")
+                bar_bytes = barkod_olustur(ub['Stok No'])
+                
+                st.image(qr_bytes, caption="QR Kod (Kamera için)", width=150)
+                if bar_bytes:
+                    st.image(bar_bytes, caption=f"Çizgili Barkod ({ub['Stok No']})", width=250)
+                    
             with c_kart2:
-                st.markdown("**Toplu QR Kod Çıktısı (A4)**")
-                html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .card { border: 1px dashed #555; padding: 10px; text-align: center; border-radius: 5px; } .card img { width: 110px; height: 110px; margin-top: 5px; } .title { font-size: 14px; font-weight: bold; margin-bottom: 3px; } .stok { font-size: 12px; color: #333; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo Barkodları</h2><div class='grid'>"
+                st.markdown("**Toplu Raf Etiketleri Çıktısı (A4 Tek Kalemde)**")
+                html_icerik = "<html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; } .card { border: 2px solid #333; padding: 12px; text-align: center; border-radius: 8px; background: #fff; color: #000; } .card img { max-width: 130px; height: auto; margin: 4px auto; display: block; } .title { font-size: 14px; font-weight: bold; margin-bottom: 2px; } .stok { font-size: 12px; color: #555; margin-bottom: 5px; } @media print { .grid { gap: 10px; } .card { page-break-inside: avoid; } }</style></head><body><h2 style='text-align:center;'>MİDES Depo Raf Etiketleri</h2><div class='grid'>"
+                
                 for _, row in df.iterrows():
-                    q_data = qr_olustur(f"Ürün: {str(row.get('Ürün Adı', ''))}\nStok No: {str(row.get('Stok No', ''))}")
-                    html_icerik += f"<div class='card'><div class='title'>{str(row.get('Ürün Adı', ''))}</div><div class='stok'>Stok No: {str(row.get('Stok No', ''))}</div><img src='data:image/png;base64,{base64.b64encode(q_data).decode()}'></div>"
+                    s_no = str(row.get('Stok No', ''))
+                    u_adi = str(row.get('Ürün Adı', ''))
+                    q_data = qr_olustur(f"Ürün: {u_adi}\nStok No: {s_no}")
+                    b_data = barkod_olustur(s_no)
+                    
+                    q_b64 = base64.b64encode(q_data).decode()
+                    b_b64 = base64.b64encode(b_data).decode() if b_data else ""
+                    
+                    html_icerik += f"<div class='card'>"
+                    html_icerik += f"<div class='title'>{u_adi}</div>"
+                    html_icerik += f"<div class='stok'>Kod: {s_no}</div>"
+                    html_icerik += f"<img src='data:image/png;base64,{q_b64}'>"
+                    if b_b64:
+                        html_icerik += f"<img src='data:image/png;base64,{b_b64}'>"
+                    html_icerik += "</div>"
+                    
                 html_icerik += "</div></body></html>"
-                st.download_button(label="📄 Yazdırılabilir Belgeyi İndir", data=html_icerik, file_name="MIDES_Barkodlar.html", mime="text/html", use_container_width=True)
+                st.download_button(label="📄 Toplu Raf Etiketlerini İndir (A4 HTML)", data=html_icerik, file_name="MIDES_Raf_Etiketleri.html", mime="text/html", use_container_width=True)
 
     with sekme5:
         st.subheader(f"📝 {st.session_state['firma']} Hareket Geçmişi")
