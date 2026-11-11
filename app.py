@@ -22,59 +22,37 @@ TR_TZ = timezone(timedelta(hours=3))
 st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout="wide")
 
 # ==========================================================
-# 🚀 MİDES KUSURSUZ MOBİL & MASAÜSTÜ CSS (SİBER SİYAH)
+# 🚀 MİDES AKILLI TEMA (LIGHT & DARK MOD UYUMLU CSS)
 # ==========================================================
-cyber_css = """
+responsive_css = """
 <style>
-.stApp {
-    background: radial-gradient(circle at 50% 10%, #090d16 0%, #030508 100%);
-    color: #f1f5f9;
+/* Sekmelerin mobilde ve masaüstünde taşmasını önleyen ve net okunmasını sağlayan ayar */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    overflow-x: auto;
 }
-h1, h2, h3 {
-    color: #00f2fe !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 20px rgba(0, 242, 254, 0.5);
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 8px 16px;
 }
-div[data-testid="stForm"], div.block-container > div {
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(0, 242, 254, 0.25);
-    border-radius: 14px;
-    backdrop-filter: blur(14px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-}
+/* Butonlar ve Formlar */
 .stButton > button {
-    background: linear-gradient(135deg, #0ba360 0%, #3cba92 100%) !important;
-    color: white !important;
-    border: 1px solid rgba(11, 163, 96, 0.5) !important;
     border-radius: 10px !important;
     font-weight: 700 !important;
-    box-shadow: 0 0 15px rgba(11, 163, 96, 0.4) !important;
-}
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0 25px rgba(11, 163, 96, 0.8) !important;
-}
-.stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background-color: rgba(3, 7, 18, 0.9) !important;
-    color: #00f2fe !important;
-    border: 1px solid rgba(0, 242, 254, 0.3) !important;
-    border-radius: 10px !important;
 }
 [data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(0, 242, 254, 0.25);
 }
 .stAlert {
     border-radius: 12px !important;
-    background-color: rgba(15, 23, 42, 0.95) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 </style>
 """
-st.markdown(cyber_css, unsafe_allow_html=True)
+st.markdown(responsive_css, unsafe_allow_html=True)
 
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
@@ -95,7 +73,7 @@ try:
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    st.error(f"⚠️ Supabase bağlantı kurulum hatası: {e}")
+    st.error(f"⚠️ Supabase bağlantı hatası: {e}")
     st.stop()
 
 def tablo_isimleri_degistir(df):
@@ -284,29 +262,18 @@ else:
     except Exception: pass
 
     # ==========================================
-    # 📱 MOBİL UYUMLU AÇILIR MENÜ
+    # 📑 KLASİK SEKMELİ YAPI (LIGHT & DARK UYUMLU)
     # ==========================================
-    st.markdown("---")
-    menu_secenekleri = [
-        "📊 Özet & Analiz", 
-        "➕ Ürün Ekle", 
-        "🔄 Güncelle / Sil", 
-        "📋 Depo Sayımı", 
-        "⚡ Hızlı İşlem", 
-        "🪪 Ürün Etiketleri", 
-        "📝 Geçmiş İşlemler", 
-        "📑 Sözleşmeler", 
-        "💬 Bildirimler", 
-        "📂 Toplu Çıkış"
-    ]
     if st.session_state['rol'] == 'admin':
-        menu_secenekleri.extend(["👥 Kullanıcı Yönetimi", "📢 Duyuru Yayınla"])
-        
-    secilen_menu = st.selectbox("📂 İŞLEM MENÜSÜ", menu_secenekleri)
-    st.markdown("---")
+        sekme1, sekme2, sekme3, sekme12, sekme6, sekme4, sekme5, sekme7, sekme8, sekme9, sekme10, sekme11 = st.tabs([
+            "📊 Özet", "➕ Ekle", "🔄 Güncelle", "📋 Sayım", "⚡ Hızlı", "🪪 Etiket", "📝 Geçmiş", "📑 Sözleşme", "💬 Bildirim", "👥 Kullanıcı", "📢 Duyuru", "📂 Çıkış"
+        ])
+    else:
+        sekme1, sekme2, sekme3, sekme12, sekme6, sekme4, sekme5, sekme7, sekme8, sekme11 = st.tabs([
+            "📊 Özet", "➕ Ekle", "🔄 Güncelle", "📋 Sayım", "⚡ Hızlı", "🪪 Etiket", "📝 Geçmiş", "📑 Sözleşme", "💬 Bildirim", "📂 Çıkış"
+        ])
 
-    # 1. ÖZET & ANALİZ
-    if secilen_menu == "📊 Özet & Analiz":
+    with sekme1:
         st.markdown(f"### 📋 Uyarılar")
         krt_sayisi = 0
         telegram_raporu = f"⚠️ {st.session_state['firma']} - {depo_adi.upper()} UYARI RAPORU ⚠️\n\n"
@@ -370,8 +337,7 @@ else:
                     son_gorme.columns = ['Firma', 'Son İşlem Tarihi']
                     st.dataframe(son_gorme.sort_values('Son İşlem Tarihi', ascending=False), use_container_width=True, hide_index=True)
 
-    # 2. ÜRÜN EKLE
-    elif secilen_menu == "➕ Ürün Ekle":
+    with sekme2:
         st.subheader("➕ Depoya Yeni Ürün Ekle")
         ekleme_yontemi = st.radio("Yöntem Seçin:", ["📝 Manuel Form", "📸 Yapay Zeka ile İrsaliye/Fatura Okut"], horizontal=True)
 
@@ -452,8 +418,7 @@ else:
                         st.success("✅ Ürünler eklendi!")
                         st.rerun()
 
-    # 3. GÜNCELLE / SİL
-    elif secilen_menu == "🔄 Güncelle / Sil":
+    with sekme3:
         st.subheader("🔄 Ürün Güncelle ve Sil")
         if not df.empty:
             secili = st.selectbox("Ürün Seçin:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
@@ -481,8 +446,7 @@ else:
                     st.success("Silindi!")
                     st.rerun()
 
-    # 4. DEPO SAYIMI
-    elif secilen_menu == "📋 Depo Sayımı":
+    with sekme12:
         st.subheader("📋 Depo Sayımı ve Eksik Takibi")
         if not df.empty:
             eksikler = df[df['Sayım Eksiği'] > 0]
@@ -519,8 +483,7 @@ else:
                         st.success("✅ Sayım işlendi!")
                         st.rerun()
 
-    # 5. HIZLI İŞLEM
-    elif secilen_menu == "⚡ Hızlı İşlem":
+    with sekme6:
         st.subheader("⚡ Hızlı İşlem")
         aranan = st.text_input("🔍 Stok Numarası:")
         if aranan and not df.empty:
@@ -541,8 +504,7 @@ else:
                             st.rerun()
             else: st.error("Ürün bulunamadı.")
 
-    # 6. ÜRÜN ETİKETLERİ
-    elif secilen_menu == "🪪 Ürün Etiketleri":
+    with sekme4:
         st.subheader("🪪 Raf Etiketleri (QR & Çizgili Barkod)")
         if not df.empty:
             sec = st.selectbox("Seç:", df['ID'].astype(str) + " - " + df['Ürün Adı'])
@@ -551,7 +513,6 @@ else:
             b_bytes = barkod_olustur(ub['Stok No'])
             if b_bytes: st.image(b_bytes, width=250)
             
-            # Toplu A4 İndir
             html = "<html><head><meta charset='utf-8'><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;}.card{border:2px solid #333;padding:10px;text-align:center;background:#fff;color:#000;}img{max-width:120px;display:block;margin:auto;}</style></head><body><h2>Etiketler</h2><div class='grid'>"
             for _, r in df.iterrows():
                 q = base64.b64encode(qr_olustur(f"Ürün: {r['Ürün Adı']}\nStok No: {r['Stok No']}")).decode()
@@ -563,8 +524,7 @@ else:
             html += "</div></body></html>"
             st.download_button("📄 Toplu A4 Etiket İndir", data=html, file_name="Etiketler.html", mime="text/html", use_container_width=True)
 
-    # 7. GEÇMİŞ İŞLEMLER
-    elif secilen_menu == "📝 Geçmiş İşlemler":
+    with sekme5:
         st.subheader("📝 Hareket Geçmişi")
         df_g = hareketleri_getir()
         if not df_g.empty:
@@ -572,16 +532,14 @@ else:
             st.download_button("📥 Excel İndir", data=df_g.to_csv(index=False).encode('utf-8-sig'), file_name="Gecmis.csv", mime='text/csv')
         else: st.info("Kayıt yok.")
 
-    # 8. SÖZLEŞMELER
-    elif secilen_menu == "📑 Sözleşmeler":
+    with sekme7:
         st.subheader("📑 Sözleşme Takibi")
         if not df.empty and 'Alım Türü' in df.columns:
             dp = df[df['Alım Türü'] == 'Piyasa Alımı']
             if not dp.empty: st.dataframe(dp[['Sözleşme No', 'Ürün Adı', 'Miktar', 'Birim', 'Sözleşme Kritik', 'Sözleşme Tarihi', 'Sözleşme Bitiş Tarihi']], use_container_width=True, hide_index=True)
             else: st.info("Sözleşmeli alım yok.")
 
-    # 9. BİLDİRİMLER
-    elif secilen_menu == "💬 Bildirimler":
+    with sekme8:
         st.subheader("💬 Geri Bildirim")
         with st.form("gb"):
             tur = st.selectbox("Tür", ["Hata", "Talep"])
@@ -593,8 +551,7 @@ else:
             res_gb = supabase.table('geri_bildirimler').select("*").execute()
             if res_gb.data: st.dataframe(tablo_isimleri_degistir(pd.DataFrame(res_gb.data)), use_container_width=True, hide_index=True)
 
-    # 10. TOPLU ÇIKIŞ
-    elif secilen_menu == "📂 Toplu Çıkış":
+    with sekme11:
         st.subheader("📂 Akıllı Toplu Çıkış")
         upl = st.file_uploader("Dosya Yükle", type=['xlsx', 'csv'])
         if upl:
@@ -614,31 +571,30 @@ else:
                 st.success("✅ Tamamlandı!")
                 st.rerun()
 
-    # 11. KULLANICI YÖNETİMİ (Admin)
-    elif secilen_menu == "👥 Kullanıcı Yönetimi" and st.session_state['rol'] == 'admin':
-        st.subheader("👥 Kullanıcı Yönetimi")
-        with st.form("yk"):
-            k = st.text_input("Kullanıcı Adı")
-            s = st.text_input("Geçici Şifre", type="password")
-            y = st.selectbox("Yetki", ["Gida", "Temizlik", "Yonetici"])
-            f = st.text_input("Firma / Birlik Adı")
-            if st.form_submit_button("Oluştur"):
-                if k and s and f:
-                    supabase.table('kullanicilar').insert({"kullanici_adi": k, "sifre": sifre_hashle(s), "yetki": y, "firma": f, "ilk_giris": "Evet", "son_guncelleme": bugun.strftime('%Y-%m-%d')}).execute()
-                    st.success("✅ Kullanıcı eklendi.")
+    if st.session_state['rol'] == 'admin':
+        with sekme9:
+            st.subheader("👥 Kullanıcı Yönetimi")
+            with st.form("yk"):
+                k = st.text_input("Kullanıcı Adı")
+                s = st.text_input("Geçici Şifre", type="password")
+                y = st.selectbox("Yetki", ["Gida", "Temizlik", "Yonetici"])
+                f = st.text_input("Firma / Birlik Adı")
+                if st.form_submit_button("Oluştur"):
+                    if k and s and f:
+                        supabase.table('kullanicilar').insert({"kullanici_adi": k, "sifre": sifre_hashle(s), "yetki": y, "firma": f, "ilk_giris": "Evet", "son_guncelleme": bugun.strftime('%Y-%m-%d')}).execute()
+                        st.success("✅ Kullanıcı eklendi.")
 
-    # 12. DUYURU (Admin)
-    elif secilen_menu == "📢 Duyuru Yayınla" and st.session_state['rol'] == 'admin':
-        st.subheader("📢 Duyuru")
-        res_d = supabase.table('duyurular').select("*").execute()
-        m_val = res_d.data[0]['mesaj'] if res_d.data else ""
-        a_val = str(res_d.data[0].get('aktif', '')) == 'Evet' if res_d.data else False
-        with st.form("duy"):
-            dm = st.text_area("Metin", value=m_val)
-            da = st.checkbox("Aktif", value=a_val)
-            if st.form_submit_button("Kaydet"):
-                durum = "Evet" if da else "Hayır"
-                if not res_d.data: supabase.table('duyurular').insert({"mesaj": dm, "aktif": durum}).execute()
-                else: supabase.table('duyurular').update({"mesaj": dm, "aktif": durum}).eq("id", res_d.data[0]['id']).execute()
-                st.success("Kaydedildi!")
-                st.rerun()
+        with sekme10:
+            st.subheader("📢 Duyuru")
+            res_d = supabase.table('duyurular').select("*").execute()
+            m_val = res_d.data[0]['mesaj'] if res_d.data else ""
+            a_val = str(res_d.data[0].get('aktif', '')) == 'Evet' if res_d.data else False
+            with st.form("duy"):
+                dm = st.text_area("Metin", value=m_val)
+                da = st.checkbox("Aktif", value=a_val)
+                if st.form_submit_button("Kaydet"):
+                    durum = "Evet" if da else "Hayır"
+                    if not res_d.data: supabase.table('duyurular').insert({"mesaj": dm, "aktif": durum}).execute()
+                    else: supabase.table('duyurular').update({"mesaj": dm, "aktif": durum}).eq("id", res_d.data[0]['id']).execute()
+                    st.success("Kaydedildi!")
+                    st.rerun()
