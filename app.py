@@ -24,80 +24,109 @@ st.set_page_config(page_title="MİDES - Akıllı Depo", page_icon="📦", layout
 # ==========================================================
 # 🚀 MİDES CYBER-COMMAND CENTER (DİJİTAL DÜNYA) CSS
 # ==========================================================
+# ==========================================================
+# 🚀 MİDES CYBER-COMMAND CENTER (MOBİL UYUMLU) CSS
+# ==========================================================
 cyber_css = """
 <style>
+/* Ana Arka Plan */
 .stApp {
-    background: radial-gradient(circle at 50% 20%, #0f172a 0%, #070a13 100%);
-    color: #f8fafc;
+    background: radial-gradient(circle at 50% 10%, #090d16 0%, #030508 100%);
+    color: #f1f5f9;
 }
+
+/* Başlıklar */
 h1, h2, h3 {
-    color: #38bdf8 !important;
+    color: #00f2fe !important;
     font-weight: 800 !important;
     letter-spacing: 0.5px;
-    text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    text-shadow: 0 0 20px rgba(0, 242, 254, 0.5);
 }
+
+/* Kartlar ve Konteynerler */
 div[data-testid="stForm"], div.block-container > div {
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(56, 189, 248, 0.2);
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(0, 242, 254, 0.25);
     border-radius: 14px;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
 }
+
+/* Butonlar */
 .stButton > button {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    background: linear-gradient(135deg, #0ba360 0%, #3cba92 100%);
     color: white !important;
-    border: 1px solid rgba(16, 185, 129, 0.4);
+    border: 1px solid rgba(11, 163, 96, 0.5);
     border-radius: 10px;
     font-weight: 700;
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 0 15px rgba(11, 163, 96, 0.4);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .stButton > button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8);
+    box-shadow: 0 0 25px rgba(11, 163, 96, 0.8);
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
+
+/* SEKME DÜZENLEMESİ (MOBİL VE MASAÜSTÜ İÇİN NET GÖRÜNÜM) */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 10px;
-    background-color: rgba(15, 23, 42, 0.9);
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(56, 189, 248, 0.15);
+    gap: 6px;
+    background-color: rgba(3, 7, 18, 0.95);
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 242, 254, 0.2);
+    overflow-x: auto;
 }
 .stTabs [data-baseweb="tab"] {
-    background-color: rgba(30, 41, 59, 0.6);
+    background-color: rgba(30, 41, 59, 0.85);
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #94a3b8;
-    padding: 10px 18px;
+    border: 1px solid rgba(0, 242, 254, 0.2);
+    color: #cbd5e1 !important; /* Yazıların net okunması için açık renk */
+    padding: 8px 14px;
     font-weight: 600;
+    font-size: 14px;
 }
 .stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, #0284c7 0%, #10b981 100%) !important;
-    color: white !important;
-    border: 1px solid rgba(56, 189, 248, 0.5) !important;
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+    background: linear-gradient(135deg, #0284c7 0%, #0ba360 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(0, 242, 254, 0.8) !important;
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.6);
+    text-shadow: 0 0 5px rgba(255,255,255,0.8);
 }
+.stTabs [data-baseweb="tab"] p {
+    color: inherit !important;
+}
+
+/* Metin Kutuları ve Form Elemanları */
 .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-    background-color: rgba(15, 23, 42, 0.8) !important;
-    color: #38bdf8 !important;
-    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    background-color: rgba(3, 7, 18, 0.9) !important;
+    color: #00f2fe !important;
+    border: 1px solid rgba(0, 242, 254, 0.3) !important;
     border-radius: 10px !important;
 }
+.stTextInput input:focus, .stNumberInput input:focus {
+    border-color: #0ba360 !important;
+    box-shadow: 0 0 15px rgba(11, 163, 96, 0.6) !important;
+}
+
+/* Veri Tabloları */
 [data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(56, 189, 248, 0.2);
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 242, 254, 0.25);
 }
+
+/* Uyarı Kutuları */
 .stAlert {
     border-radius: 12px !important;
-    background-color: rgba(30, 41, 59, 0.9) !important;
+    background-color: rgba(15, 23, 42, 0.95) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 </style>
 """
 st.markdown(cyber_css, unsafe_allow_html=True)
+
 
 def sifre_hashle(sifre):
     return hashlib.sha256(str(sifre).encode('utf-8')).hexdigest()
