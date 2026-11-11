@@ -193,7 +193,6 @@ def otomatik_0800_kontrol_islevi():
                 except: pass
                 
             if kurtarici > 0:
-                # Kayıtlı kullanıcıların telegram bilgilerine gönder
                 k_res = supabase.table('kullanicilar').select("telegram_token, chat_id, firma").execute()
                 if k_res.data:
                     for k in k_res.data:
@@ -210,7 +209,6 @@ def arka_plan_zamanlayici_baslat():
         schedule.run_pending()
         time.sleep(60)
 
-# Arka plan iş parçacığını bir kez başlat
 if 'zamanlayici_basladi' not in st.session_state:
     st.session_state['zamanlayici_basladi'] = True
     t = threading.Thread(target=arka_plan_zamanlayici_baslat, daemon=True)
@@ -218,7 +216,10 @@ if 'zamanlayici_basladi' not in st.session_state:
 
 # --- OTURUM YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
-    st.session_state.update({'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False})
+    st.session_state.update({
+        'giris_yapildi': False, 'kullanici': "", 'rol': "", 'firma': "", 
+        'sifre_degistirme_modu': False, 'ilk_giris_uyarisi': False, 'telegram_ayar_modu': False
+    })
 
 try:
     kullanicilar_res = supabase.table('kullanicilar').select("*").execute()
@@ -227,27 +228,84 @@ except Exception as e:
     st.error(f"🚨 Supabase bağlantı hatası: {e}")
     st.stop()
 
+# TELEGRAM REHBER METNİ
+telegram_rehber_html = """
+<details>
+<summary><b>📖 Telegram Token ve Chat ID Nasıl Alınır? (İsteğe Bağlı)</b></summary>
+<p>
+Telegram kullanan personeller bildirim alabilmek için doldurabilir, zorunlu değildir:<br>
+1. <b>Bot Oluşturma:</b> Telegram'da <b>@BotFather</b> aratın, <code>/start</code> yazın, ardından <code>/newbot</code> komutunu gönderip bir isim verin. BotFather size bir <b>Token</b> verecektir.<br>
+2. <b>Sohbeti Başlatma:</b> Oluşturduğunuz botunuzu aratıp açın ve <b>Start</b> butonuna basın.<br>
+3. <b>Chat ID Öğrenme:</b> Telegram'da <b>@userinfobot</b> aratın ve sohbeti başlatın, size vereceği rakam sizin <b>Chat ID</b>'nizdir.
+</p>
+</details>
+"""
+
+# 1. İLK GİRİŞTE SADECE ŞİFRE DEĞİŞTİRME (ZORUNLU)
 if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'): 
-        st.warning("⚠️ İlk giriş! Lütfen yeni güvenli şifrenizi belirleyin.")
+        st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için kendi güvenli şifrenizi belirleyin.")
     else: 
-        st.warning("⚠️ Şifre süresi doldu. Lütfen yeni şifre belirleyin.")
+        st.warning("⚠️ Şifrenizin kullanım süresi dolmuş. Lütfen yeni şifre belirleyin.")
         
-    with st.form("sifre_degistir_formu"):
+    with st.form("ilk_sifre_formu"):
         yeni_sifre = st.text_input("Yeni Şifre:", type="password")
         yeni_sifre_tekrar = st.text_input("Yeni Şifre (Tekrar):", type="password")
         
-        if st.form_submit_button("Şifreyi Güncelle"):
+        if st.form_submit_button("Şifreyi Kaydet ve Devam Et"):
             if yeni_sifre == yeni_sifre_tekrar and len(yeni_sifre) >= 4:
                 kullanici_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].iloc[0]['ID'])
                 bugun = datetime.now(TR_TZ).strftime('%Y-%m-%d')
+                
                 supabase.table('kullanicilar').update({
-                    "sifre": sifre_hashle(yeni_sifre), "son_guncelleme": bugun, "ilk_giris": "Hayır"
+                    "sifre": sifre_hashle(yeni_sifre), 
+                    "son_guncelleme": bugun, 
+                    "ilk_giris": "Hayır"
                 }).eq("id", kullanici_id).execute()
-                st.success("✅ Şifre güncellendi! Yeniden giriş yapın.")
-                st.session_state.update({'sifre_degistirme_modu': False, 'giris_yapildi': False, 'ilk_giris_uyarisi': False})
-                st.stop()
-            else: st.error("Şifreler uyuşmuyor veya çok kısa.")
+                
+                st.success("✅ Şifreniz başarıyla kaydedildi!")
+                st.session_state.update({
+                    'sifre_degistirme_modu': False, 'giris_yapildi': True, 'ilk_giris_uyarisi': False
+                })
+                time.sleep(1)
+                st.rerun()
+            else: 
+                st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
+    st.stop()
+
+# 2. İSTEDİĞİ ZAMAN AÇIP TELEGRAM AYARLAYABİLECEĞİ EKRAN (OPSİYONEL)
+if st.session_state.get('telegram_ayar_modu'):
+    st.info("📱 Telegram Bildirim Ayarlarınızı Yapılandırın (Zorunlu Değildir)")
+    with st.form("telegram_ayar_formu"):
+        st.markdown(telegram_rehber_html, unsafe_allow_html=True)
+        
+        mevcut_k = df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']]
+        esk_token = str(mevcut_k.iloc[0].get('Telegram Token', '')) if not mevcut_k.empty else ""
+        esk_chat = str(mevcut_k.iloc[0].get('Chat ID', '')) if not mevcut_k.empty else ""
+        if esk_token == "nan": esk_token = ""
+        if esk_chat == "nan": esk_chat = ""
+
+        girilen_token = st.text_input("Telegram Bot Token (Boş bırakabilirsiniz):", value=esk_token)
+        girilen_chat = st.text_input("Telegram Chat ID (Boş bırakabilirsiniz):", value=esk_chat)
+        
+        c_t1, c_t2 = st.columns(2)
+        if c_t1.form_submit_button("💾 Telegram Bilgilerini Kaydet"):
+            kullanici_id = int(df_kullanicilar[df_kullanicilar['Kullanıcı Adı'] == st.session_state['kullanici']].iloc[0]['ID'])
+            supabase.table('kullanicilar').update({
+                "telegram_token": girilen_token.strip(),
+                "chat_id": girilen_chat.strip()
+            }).eq("id", kullanici_id).execute()
+            
+            st.session_state['telegram_token'] = girilen_token.strip()
+            st.session_state['telegram_chat_id'] = girilen_chat.strip()
+            st.success("✅ Telegram ayarları güncellendi!")
+            st.session_state['telegram_ayar_modu'] = False
+            time.sleep(1)
+            st.rerun()
+            
+        if c_t2.form_submit_button("❌ Geri Dön"):
+            st.session_state['telegram_ayar_modu'] = False
+            st.rerun()
     st.stop()
 
 if not st.session_state['giris_yapildi']:
@@ -318,14 +376,20 @@ else:
         
     bugun = datetime.now(TR_TZ).date()
                         
-    c_ust1, c_ust2 = st.columns([4, 1])
+    c_ust1, c_ust2 = st.columns([3, 2])
     with c_ust1: st.title(f"📦 {st.session_state['firma']} - {depo_adi}")
     with c_ust2:
         st.write(f"👤 {st.session_state['kullanici']} ({'Merkez Yönetici' if st.session_state['rol'] == 'admin' else 'Firma Yetkilisi'})")
-        if st.button("🔄 Şifre Değiştir"):
+        
+        # ÜST BUTONLAR
+        b_col1, b_col2, b_col3 = st.columns(3)
+        if b_col1.button("🔄 Şifre Değiştir"):
             st.session_state['sifre_degistirme_modu'] = True
             st.rerun()
-        if st.button("🚪 Çıkış Yap"):
+        if b_col2.button("📱 Telegram Ayarları"):
+            st.session_state['telegram_ayar_modu'] = True
+            st.rerun()
+        if b_col3.button("🚪 Çıkış Yap"):
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
@@ -797,7 +861,7 @@ else:
                         except Exception as e:
                             st.error("Kayıt sırasında bir hata oluştu. Kullanıcı adı zaten mevcut olabilir.")
                     else: 
-                        st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
+                        st.error("Kullanıcı Adı, Şifre dan Firma boş bırakılamaz.")
 
             st.divider()
 
