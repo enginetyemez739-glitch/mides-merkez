@@ -203,16 +203,23 @@ def otomatik_0800_kontrol_islevi():
     except Exception as e:
         print(f"Zamanlayıcı Hatası: {e}")
 
+@st.cache_resource
 def arka_plan_zamanlayici_baslat():
-    schedule.every().day.at("08:00").do(otomatik_0800_kontrol_islevi)
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-if 'zamanlayici_basladi' not in st.session_state:
-    st.session_state['zamanlayici_basladi'] = True
-    t = threading.Thread(target=arka_plan_zamanlayici_baslat, daemon=True)
+    # Sunucu UTC olduğu için Türkiye saati 08:00 = UTC 05:00'dır.
+    schedule.every().day.at("05:00").do(otomatik_0800_kontrol_islevi)
+    
+    def run_schedule():
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+            
+    t = threading.Thread(target=run_schedule, daemon=True)
     t.start()
+    return True
+
+# Sistemi kaç kişi açarsa açsın, bu komut sunucuda sadece 1 kez çalışır.
+arka_plan_zamanlayici_baslat()
+
 
 # --- OTURUM YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
