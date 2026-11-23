@@ -68,6 +68,17 @@ def rakam_temizle(deger):
     except:
         return 0.0
 
+# --- GÜVENLİ MİKTAR DÖNÜŞTÜRÜCÜ (HATA ÖNLEYİCİ) ---
+def guvenli_float(deger):
+    if not deger:
+        return 0.0
+    try:
+        temiz = str(deger).replace(',', '.').strip()
+        temiz_rakam = "".join([c for c in temiz if c.isdigit() or c == '.'])
+        return float(temiz_rakam) if temiz_rakam else 0.0
+    except:
+        return 0.0
+
 # --- GÜVENLİ SUPABASE BAĞLANTISI ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].strip().rstrip("/")
@@ -205,7 +216,6 @@ def otomatik_0800_kontrol_islevi():
 
 @st.cache_resource
 def arka_plan_zamanlayici_baslat():
-    # Sunucu UTC olduğu için Türkiye saati 08:00 = UTC 05:00'dır.
     schedule.every().day.at("05:00").do(otomatik_0800_kontrol_islevi)
     
     def run_schedule():
@@ -217,9 +227,7 @@ def arka_plan_zamanlayici_baslat():
     t.start()
     return True
 
-# Sistemi kaç kişi açarsa açsın, bu komut sunucuda sadece 1 kez çalışır.
 arka_plan_zamanlayici_baslat()
-
 
 # --- OTURUM YÖNETİMİ ---
 if 'giris_yapildi' not in st.session_state:
@@ -235,7 +243,6 @@ except Exception as e:
     st.error(f"🚨 Supabase bağlantı hatası: {e}")
     st.stop()
 
-# TELEGRAM REHBER METNİ
 telegram_rehber_html = """
 <details>
 <summary><b>📖 Telegram Token ve Chat ID Nasıl Alınır? (İsteğe Bağlı)</b></summary>
@@ -248,7 +255,6 @@ Telegram kullanan personeller bildirim alabilmek için doldurabilir, zorunlu de�
 </details>
 """
 
-# 1. İLK GİRİŞTE SADECE ŞİFRE DEĞİŞTİRME (ZORUNLU)
 if st.session_state['sifre_degistirme_modu']:
     if st.session_state.get('ilk_giris_uyarisi'): 
         st.warning("⚠️ Sisteme ilk girişiniz! Lütfen devam etmek için kendi güvenli şifrenizi belirleyin.")
@@ -280,7 +286,6 @@ if st.session_state['sifre_degistirme_modu']:
                 st.error("Şifreler uyuşmuyor veya çok kısa (en az 4 karakter olmalı).")
     st.stop()
 
-# 2. İSTEDİĞİ ZAMAN AÇIP TELEGRAM AYARLAYABİLECEĞİ EKRAN (OPSİYONEL)
 if st.session_state.get('telegram_ayar_modu'):
     st.info("📱 Telegram Bildirim Ayarlarınızı Yapılandırın (Zorunlu Değildir)")
     with st.form("telegram_ayar_formu"):
@@ -361,7 +366,6 @@ if not st.session_state['giris_yapildi']:
                     else: st.error("❌ Bu sisteme giriş yetkiniz bulunmamaktadır!")
             else: st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
-    # --- ANA ARAYÜZ ---
     if st.session_state['rol'] == 'admin':
         st.info("👑 **Merkezi Yönetici Modu:** Tüm yetkilere sahipsiniz.")
         secilen_depo = st.selectbox("Aktif Depo", ["🍎 Gıda Deposu", "🧹 Temizlik Deposu"])
@@ -388,7 +392,6 @@ else:
     with c_ust2:
         st.write(f"👤 {st.session_state['kullanici']} ({'Merkez Yönetici' if st.session_state['rol'] == 'admin' else 'Firma Yetkilisi'})")
         
-        # ÜST BUTONLAR
         b_col1, b_col2, b_col3 = st.columns(3)
         if b_col1.button("🔄 Şifre Değiştir"):
             st.session_state['sifre_degistirme_modu'] = True
@@ -400,7 +403,6 @@ else:
             st.session_state['giris_yapildi'] = False
             st.rerun()
 
-    # Duyurular
     try:
         res_duyuru = supabase.table('duyurular').select("*").execute()
         if res_duyuru.data:
@@ -592,7 +594,10 @@ else:
                         for i, r in duzenlenmis_giris.iterrows():
                             s_no = str(r.get('Stok No', '')).strip()
                             u_adi = str(r.get('Ürün Adı', '')).strip()
-                            miktar_val = float(r.get('Miktar', 0) or 0)
+                            
+                            # --- GÜVENLİ MİKTAR ÇEVRİMİ (HATA ÖNLEYİCİ) ---
+                            miktar_val = guvenli_float(r.get('Miktar', 0))
+                            
                             birim_val = str(r.get('Birim', 'Adet')).strip()
                             skt_val = str(r.get('SKT', zaman)).strip()
                             kritik_val = int(float(r.get('Kritik Stok', 10) or 10))
@@ -662,7 +667,6 @@ else:
                     st.success(f"🗑️ Ürün depodan silindi!")
                     st.rerun()
 
-    # GELİŞTİRİLMİŞ SAYIM VE EKSİK TAKİP MODÜLÜ
     with sekme12:
         st.subheader("📋 Depo Sayımı ve Kalıcı Eksik Takibi")
         
@@ -923,7 +927,6 @@ else:
                     st.success("Duyuru güncellendi!")
                     st.rerun()
 
-    # --- GEMINI YAPAY ZEKA MODÜLÜ (ÇIKIŞ) ---
     with sekme11:
         st.subheader("📂 Akıllı Toplu Çıkış İşlemi")
         giris_yontemi = st.radio("Listeyi Sisteme Nasıl Aktaracaksınız?", ["📸 Fotoğraf Çekerek (Yapay Zeka Okur)", "📥 Excel / CSV Dosyası Yükleyerek"], horizontal=True)
@@ -978,7 +981,10 @@ else:
                 for _, row in df_yuklenen.iterrows():
                     aranan_stok = str(row[stok_sutunu]).strip()
                     if not aranan_stok or aranan_stok == "nan": continue
-                    dusulecek = rakam_temizle(row[miktar_sutunu])
+                    
+                    # --- GÜVENLİ MİKTAR ÇEVRİMİ (HATA ÖNLEYİCİ) ---
+                    dusulecek = guvenli_float(row[miktar_sutunu])
+                    
                     if dusulecek > 0:
                         eslesen = df[df['Stok No'].astype(str).str.strip() == aranan_stok].copy()
                         if not eslesen.empty:
