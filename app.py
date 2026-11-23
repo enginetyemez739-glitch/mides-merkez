@@ -68,7 +68,6 @@ def rakam_temizle(deger):
     except:
         return 0.0
 
-# --- GÜVENLİ MİKTAR DÖNÜŞTÜRÜCÜ (HATA ÖNLEYİCİ) ---
 def guvenli_float(deger):
     if not deger:
         return 0.0
@@ -111,8 +110,12 @@ def verileri_getir(tablo_adi):
         df = pd.DataFrame(res.data)
         if not df.empty:
             df = tablo_isimleri_degistir(df)
-            if 'Firma' in df.columns and st.session_state.get('rol') != 'admin':
-                df = df[df['Firma'].astype(str) == st.session_state['firma']]
+            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
+            kullanici_firma = str(st.session_state.get('firma', '')).strip()
+            
+            # MERKEZ YÖNETİCİ DEĞİLSE, SADECE KENDİ FİRMASININ VERİLERİNİ GÖRSÜN
+            if kullanici_rol != 'admin' and 'Firma' in df.columns:
+                df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
         return df
     except Exception as e:
         st.error(f"Veri çekme hatası ({tablo_adi}): {e}")
@@ -124,8 +127,10 @@ def hareketleri_getir():
         df = pd.DataFrame(res.data)
         if not df.empty:
             df = tablo_isimleri_degistir(df)
-            if st.session_state.get('rol') != 'admin':
-                df = df[df['Firma'].astype(str) == st.session_state['firma']]
+            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
+            kullanici_firma = str(st.session_state.get('firma', '')).strip()
+            if kullanici_rol != 'admin' and 'Firma' in df.columns:
+                df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
             return df.sort_values(by="ID", ascending=False)
     except Exception:
         pass
@@ -173,44 +178,57 @@ def telegram_mesaj_gonder(mesaj):
     if 'telegram_token' in st.session_state and 'telegram_chat_id' in st.session_state:
         telegram_mesaj_gonder_tokenli(st.session_state['telegram_token'], st.session_state['telegram_chat_id'], mesaj)
 
-# --- OTOMATİK ZAMANLAYICI (HER GÜN SAAT 08:00) ---
+# --- OTOMATİK ZAMANLAYICI (HER GÜN SAAT 08:00 - FİRMA İZOLASYONLU) ---
 def otomatik_0800_kontrol_islevi():
     try:
         bugun = datetime.now(TR_TZ).date()
-        for tablo in ['gida_deposu', 'temizlik_deposu']:
-            res = supabase.table(tablo).select("*").execute()
-            if not res.data: continue
-            df_auto = pd.DataFrame(res.data)
-            df_auto = tablo_isimleri_degistir(df_auto)
+        k_res = supabase.table('kullanicilar').select("kullanici_adi, telegram_token, chat_id, firma, yetki").execute()
+        if not k_res.data: return
+        
+        for k in k_res.data:
+            t_token = k.get('telegram_token')
+            t_chat = k.get('chat_id')
+            k_firma = str(k.get('firma', '')).strip()
+            k_yetki = str(k.get('yetki', '')).strip().lower()
             
-            rapor = f"⏰ OTOMATİK 08:00 RAPORU ({tablo.upper()})\n\n"
+            if not t_token or not t_chat or str(t_token).lower() == "nan" or str(t_chat).lower() == "nan":
+                continue
+                
+            bireysel_rapor = f"⏰ OTOMATİK 08:00 RAPORU ({k_firma})\n\n"
             kurtarici = 0
-            for _, row in df_auto.iterrows():
-                u_adi = str(row.get('Ürün Adı', ''))
-                mik = float(row.get('Miktar', 0) or 0)
-                krit = float(row.get('Kritik Stok', 10) or 10)
-                skt_str = str(row.get('SKT', ''))
+            
+            for tablo in ['gida_deposu', 'temizlik_deposu']:
+                res = supabase.table(tablo).select("*").execute()
+                if not res.data: continue
+                df_auto = pd.DataFrame(res.data)
+                df_auto = tablo_isimleri_degistir(df_auto)
                 
-                if mik <= krit:
-                    rapor += f"📉 ALARM: {u_adi} (Kalan: {mik})\n"
-                    kurtarici += 1
-                try:
-                    if skt_str and skt_str != "-":
-                        skt_tarih = datetime.strptime(skt_str, '%Y-%m-%d').date()
-                        kalan_gun = (skt_tarih - bugun).days
-                        if kalan_gun <= 30:
-                            rapor += f"⚠️ SKT UYARI: {u_adi} ({kalan_gun} gün kaldı)\n"
-                            kurtarici += 1
-                except: pass
+                if 'Firma' in df_auto.columns and k_yetki not in ['admin', 'merkez yönetici']:
+                    df_auto = df_auto[df_auto['Firma'].astype(str).str.strip().str.lower() == k_firma.lower()]
                 
+                if df_auto.empty: continue
+                
+                bireysel_rapor += f"--- {tablo.upper()} ---\n"
+                for _, row in df_auto.iterrows():
+                    u_adi = str(row.get('Ürün Adı', ''))
+                    mik = float(row.get('Miktar', 0) or 0)
+                    krit = float(row.get('Kritik Stok', 10) or 10)
+                    skt_str = str(row.get('SKT', ''))
+                    
+                    if mik <= krit:
+                        bireysel_rapor += f"📉 ALARM: {u_adi} (Kalan: {mik})\n"
+                        kurtarici += 1
+                    try:
+                        if skt_str and skt_str != "-":
+                            skt_tarih = datetime.strptime(skt_str, '%Y-%m-%d').date()
+                            kalan_gun = (skt_tarih - bugun).days
+                            if kalan_gun <= 30:
+                                bireysel_rapor += f"⚠️ SKT UYARI: {u_adi} ({kalan_gun} gün kaldı)\n"
+                                kurtarici += 1
+                    except: pass
+            
             if kurtarici > 0:
-                k_res = supabase.table('kullanicilar').select("telegram_token, chat_id, firma").execute()
-                if k_res.data:
-                    for k in k_res.data:
-                        t_token = k.get('telegram_token')
-                        t_chat = k.get('chat_id')
-                        if t_token and t_chat:
-                            telegram_mesaj_gonder_tokenli(t_token, t_chat, rapor)
+                telegram_mesaj_gonder_tokenli(t_token, t_chat, bireysel_rapor)
     except Exception as e:
         print(f"Zamanlayıcı Hatası: {e}")
 
@@ -525,7 +543,7 @@ else:
                         "sozlesme_bitis_tarihi": str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-",
                         "sozlesme_kritik": sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0,
                         "sayim_eksigi": 0,
-                        "firma": st.session_state['firma']
+                        "firma": st.session_state['firma']  # <-- OTOMATİK EKLENİR
                     }
                     supabase.table(aktif_tablo).insert(yeni_veri).execute()
                     log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
@@ -594,10 +612,7 @@ else:
                         for i, r in duzenlenmis_giris.iterrows():
                             s_no = str(r.get('Stok No', '')).strip()
                             u_adi = str(r.get('Ürün Adı', '')).strip()
-                            
-                            # --- GÜVENLİ MİKTAR ÇEVRİMİ (HATA ÖNLEYİCİ) ---
                             miktar_val = guvenli_float(r.get('Miktar', 0))
-                            
                             birim_val = str(r.get('Birim', 'Adet')).strip()
                             skt_val = str(r.get('SKT', zaman)).strip()
                             kritik_val = int(float(r.get('Kritik Stok', 10) or 10))
@@ -669,7 +684,6 @@ else:
 
     with sekme12:
         st.subheader("📋 Depo Sayımı ve Kalıcı Eksik Takibi")
-        
         if not df.empty:
             eksikler_df = df[df['Sayım Eksiği'] > 0]
             if not eksikler_df.empty:
@@ -677,7 +691,7 @@ else:
                 st.dataframe(eksikler_df[['Stok No', 'Ürün Adı', 'Sayım Eksiği', 'Birim']], hide_index=True, use_container_width=True)
                 st.divider()
 
-            st.info("Raflardaki gerçek ürün sayılarını girin. Eksik çıkarsa 'Sayım Eksiği' olarak kalıcı kaydedilir. Eğer geçmişteki eksik ürünü bulup fazla girerseniz, eksik borcunuz otomatik kapanır.")
+            st.info("Raflardaki gerçek ürün sayılarını girin. Eksik çıkarsa 'Sayım Eksiği' olarak kalıcı kaydedilir.")
             
             sayim_df = df[['ID', 'Stok No', 'Ürün Adı', 'Miktar', 'Sayım Eksiği', 'Birim']].copy()
             sayim_df.rename(columns={'Miktar': 'Sistemdeki Miktar', 'Sayım Eksiği': 'Bilinen Eksik Miktar'}, inplace=True)
@@ -701,11 +715,9 @@ else:
                 fark_olanlar = duzenlenmis_sayim[duzenlenmis_sayim['Fark'] != 0].copy()
                 
                 if fark_olanlar.empty:
-                    st.success("✅ Mükemmel! Yaptığınız fiziki sayım ile sistemdeki stoklar birebir eşleşiyor. Yeni bir fark yok.")
+                    st.success("✅ Mükemmel! Yaptığınız fiziki sayım ile sistemdeki stoklar birebir eşleşiyor.")
                 else:
-                    st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi. İlgili ürünlerin stokları ve eksik hafızaları güncellendi!")
-                    
-                    zaman = datetime.now(TR_TZ).strftime('%Y-%m-%d %H:%M:%S')
+                    st.warning("⚠️ Sayım sonucunda sistem kayıtları ile uyuşmayan ürünler tespit edildi.")
                     for _, row in fark_olanlar.iterrows():
                         urun_id = int(row['ID'])
                         yeni_miktar = float(row['Raftaki Gerçek Sayı'])
@@ -716,20 +728,15 @@ else:
                         if fark < 0:
                             yeni_eksik = eski_eksik + abs(fark)
                             islem_tipi = "SAYIM EKSİĞİ (ÇIKIŞ)"
-                            aciklama = f"Sistem: {row['Sistemdeki Miktar']} | Sayım: {yeni_miktar} | Yeni oluşan eksik: {abs(fark)}"
+                            aciklama = f"Sistem: {row['Sistemdeki Miktar']} | Sayım: {yeni_miktar}"
                         else:
                             kapanan = min(eski_eksik, fark)
                             yeni_eksik = eski_eksik - kapanan
-                            if kapanan > 0:
-                                islem_tipi = "EKSİK TAMAMLAMA (GİRİŞ)"
-                                aciklama = f"Önceki eksiklerden {kapanan} kadarı bulundu/tamamlandı."
-                            else:
-                                islem_tipi = "SAYIM FAZLASI (GİRİŞ)"
-                                aciklama = f"Sistemde {row['Sistemdeki Miktar']} görünüyordu, sayımda {yeni_miktar} (fazla) çıktı."
+                            islem_tipi = "EKSİK TAMAMLAMA (GİRİŞ)" if kapanan > 0 else "SAYIM FAZLASI (GİRİŞ)"
+                            aciklama = f"Sayım fazlası/tamamlama."
                         
                         supabase.table(aktif_tablo).update({"miktar": yeni_miktar, "sayim_eksigi": yeni_eksik}).eq("id", urun_id).execute()
                         log_kaydet(st.session_state['kullanici'], islem_tipi, urun_adi, abs(fark), aciklama)
-                        
                     st.toast("✅ Veritabanı başarıyla güncellendi!")
                     st.rerun()
         else:
@@ -872,7 +879,7 @@ else:
                         except Exception as e:
                             st.error("Kayıt sırasında bir hata oluştu. Kullanıcı adı zaten mevcut olabilir.")
                     else: 
-                        st.error("Kullanıcı Adı, Şifre dan Firma boş bırakılamaz.")
+                        st.error("Kullanıcı Adı, Şifre ve Firma boş bırakılamaz.")
 
             st.divider()
 
@@ -894,7 +901,7 @@ else:
                                     "ilk_giris": "Evet",
                                     "son_guncelleme": datetime.now(TR_TZ).strftime('%Y-%m-%d')
                                 }).eq("id", hedef_id).execute()
-                                st.success(f"✅ Başarılı! '{secilen_kullanici}' hesabının şifresi sıfırlandı. İlk girişinde kendi şifresini belirlemeye zorlanacak.")
+                                st.success(f"✅ Başarılı! '{secilen_kullanici}' hesabının şifresi sıfırlandı.")
                             except Exception as e:
                                 st.error("Sıfırlama sırasında veritabanı hatası oluştu.")
                         else:
@@ -946,7 +953,7 @@ else:
                             else:
                                 genai.configure(api_key=gemini_api_key)
                                 model = genai.GenerativeModel('gemini-3.5-flash')
-                                prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' (İhtiyaç Miktarı veya Kal. Mktr. sütunu altındaki sayılar) değerlerini çıkar. Miktarı 0 olanları yoksay. Rakamlardaki virgül formatını bozmadan olduğu gibi al. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
+                                prompt = """Sen uzman bir veri çıkarma asistanısın. Gönderdiğim fotoğrafta bir 'Malzeme İhtiyaç Listesi' bulunuyor. Tablodaki malzemeleri oku ve her bir satır için sadece 'Stok No' (89 ile başlayan rakamlar) ve düşülecek 'Miktar' değerlerini çıkar. Miktarı 0 olanları yoksay. Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme. Örnek Format: [{"Stok No": "8920270048540", "Miktar": "25"}]"""
                                 img = Image.open(resim_dosyasi)
                                 response = model.generate_content([prompt, img])
                                 
@@ -982,7 +989,6 @@ else:
                     aranan_stok = str(row[stok_sutunu]).strip()
                     if not aranan_stok or aranan_stok == "nan": continue
                     
-                    # --- GÜVENLİ MİKTAR ÇEVRİMİ (HATA ÖNLEYİCİ) ---
                     dusulecek = guvenli_float(row[miktar_sutunu])
                     
                     if dusulecek > 0:
