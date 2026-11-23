@@ -110,12 +110,20 @@ def verileri_getir(tablo_adi):
         df = pd.DataFrame(res.data)
         if not df.empty:
             df = tablo_isimleri_degistir(df)
-            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
             kullanici_firma = str(st.session_state.get('firma', '')).strip()
+            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
             
-            # MERKEZ YÖNETİCİ DEĞİLSE, SADECE KENDİ FİRMASININ VERİLERİNİ GÖRSÜN
-            if kullanici_rol != 'admin' and 'Firma' in df.columns:
-                df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
+            # KESİN KURAL: EĞER KULLANICI "admin" DEĞİLSE VEYA KENDİ FİRMASI VARSA, 
+            # SADECE KENDİ FİRMASININ ÜRÜNLERİNİ FİLTRELE.
+            # (Eğer admin ise ve kendi adına kayıtlı bir depo ürünü varsa onu görür, yoksa boş döner 
+            # çünkü merkez yöneticisi diğer depoların stoklarını listelemez).
+            if 'Firma' in df.columns:
+                if kullanici_rol == 'admin' and (kullanici_firma == "" or kullanici_firma.lower() == "mides merkez"):
+                    # Merkez yöneticisi kendi özel deposu haricinde başkasının stoğunu göremez, 
+                    # bu yüzden tabloyu boş döndürür veya sadece merkeze ait veriyi gösterir.
+                    df = df[df['Firma'].astype(str).str.strip().str.lower() == "mides merkez"]
+                else:
+                    df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
         return df
     except Exception as e:
         st.error(f"Veri çekme hatası ({tablo_adi}): {e}")
@@ -127,8 +135,9 @@ def hareketleri_getir():
         df = pd.DataFrame(res.data)
         if not df.empty:
             df = tablo_isimleri_degistir(df)
-            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
             kullanici_firma = str(st.session_state.get('firma', '')).strip()
+            kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
+            
             if kullanici_rol != 'admin' and 'Firma' in df.columns:
                 df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
             return df.sort_values(by="ID", ascending=False)
@@ -203,7 +212,8 @@ def otomatik_0800_kontrol_islevi():
                 df_auto = pd.DataFrame(res.data)
                 df_auto = tablo_isimleri_degistir(df_auto)
                 
-                if 'Firma' in df_auto.columns and k_yetki not in ['admin', 'merkez yönetici']:
+                # SADECE O KULLANICININ FİRMASINA AİT ÜRÜNLER
+                if 'Firma' in df_auto.columns:
                     df_auto = df_auto[df_auto['Firma'].astype(str).str.strip().str.lower() == k_firma.lower()]
                 
                 if df_auto.empty: continue
@@ -385,7 +395,7 @@ if not st.session_state['giris_yapildi']:
             else: st.error("❌ Kullanıcı adı veya şifre hatalı!")
 else:
     if st.session_state['rol'] == 'admin':
-        st.info("👑 **Merkezi Yönetici Modu:** Tüm yetkilere sahipsiniz.")
+        st.info("👑 **Merkez Yönetici Paneli:** Kullanıcı yönetimi, denetim ve hata müdahale modundasınız.")
         secilen_depo = st.selectbox("Aktif Depo", ["🍎 Gıda Deposu", "🧹 Temizlik Deposu"])
         aktif_tablo = "gida_deposu" if "Gıda" in secilen_depo else "temizlik_deposu"
         depo_adi = "Gıda Deposu" if "Gıda" in secilen_depo else "Temizlik Deposu"
@@ -543,7 +553,7 @@ else:
                         "sozlesme_bitis_tarihi": str(sozlesme_bitis) if alim_turu == "Piyasa Alımı" else "-",
                         "sozlesme_kritik": sozlesme_kritik if alim_turu == "Piyasa Alımı" else 0.0,
                         "sayim_eksigi": 0,
-                        "firma": st.session_state['firma']  # <-- OTOMATİK EKLENİR
+                        "firma": st.session_state['firma']
                     }
                     supabase.table(aktif_tablo).insert(yeni_veri).execute()
                     log_kaydet(st.session_state['kullanici'], "YENİ KAYIT", urun_adi, miktar, f"{alim_turu} ile eklendi")
@@ -687,7 +697,7 @@ else:
         if not df.empty:
             eksikler_df = df[df['Sayım Eksiği'] > 0]
             if not eksikler_df.empty:
-                st.error("🚨 **DİKKAT - GEÇMİŞTEN KALAN EKSİKLER:** Aşağıdaki ürünler önceki sayımlarda eksik çıkmıştır ve henüz depoda bulunamamış/tamamlanmamıştır.")
+                st.error("🚨 **DİKKAT - GEÇMİŞTEN KALAN EKSİKLER:** Aşağıdaki ürünler önceki sayımlarda eksik çıkmıştır.")
                 st.dataframe(eksikler_df[['Stok No', 'Ürün Adı', 'Sayım Eksiği', 'Birim']], hide_index=True, use_container_width=True)
                 st.divider()
 
@@ -728,15 +738,13 @@ else:
                         if fark < 0:
                             yeni_eksik = eski_eksik + abs(fark)
                             islem_tipi = "SAYIM EKSİĞİ (ÇIKIŞ)"
-                            aciklama = f"Sistem: {row['Sistemdeki Miktar']} | Sayım: {yeni_miktar}"
                         else:
                             kapanan = min(eski_eksik, fark)
                             yeni_eksik = eski_eksik - kapanan
                             islem_tipi = "EKSİK TAMAMLAMA (GİRİŞ)" if kapanan > 0 else "SAYIM FAZLASI (GİRİŞ)"
-                            aciklama = f"Sayım fazlası/tamamlama."
                         
                         supabase.table(aktif_tablo).update({"miktar": yeni_miktar, "sayim_eksigi": yeni_eksik}).eq("id", urun_id).execute()
-                        log_kaydet(st.session_state['kullanici'], islem_tipi, urun_adi, abs(fark), aciklama)
+                        log_kaydet(st.session_state['kullanici'], islem_tipi, urun_adi, abs(fark), "Sayım İşlemi")
                     st.toast("✅ Veritabanı başarıyla güncellendi!")
                     st.rerun()
         else:
