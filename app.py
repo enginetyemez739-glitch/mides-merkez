@@ -113,14 +113,8 @@ def verileri_getir(tablo_adi):
             kullanici_firma = str(st.session_state.get('firma', '')).strip()
             kullanici_rol = str(st.session_state.get('rol', '')).strip().lower()
             
-            # KESİN KURAL: EĞER KULLANICI "admin" DEĞİLSE VEYA KENDİ FİRMASI VARSA, 
-            # SADECE KENDİ FİRMASININ ÜRÜNLERİNİ FİLTRELE.
-            # (Eğer admin ise ve kendi adına kayıtlı bir depo ürünü varsa onu görür, yoksa boş döner 
-            # çünkü merkez yöneticisi diğer depoların stoklarını listelemez).
             if 'Firma' in df.columns:
                 if kullanici_rol == 'admin' and (kullanici_firma == "" or kullanici_firma.lower() == "mides merkez"):
-                    # Merkez yöneticisi kendi özel deposu haricinde başkasının stoğunu göremez, 
-                    # bu yüzden tabloyu boş döndürür veya sadece merkeze ait veriyi gösterir.
                     df = df[df['Firma'].astype(str).str.strip().str.lower() == "mides merkez"]
                 else:
                     df = df[df['Firma'].astype(str).str.strip().str.lower() == kullanici_firma.lower()]
@@ -212,7 +206,6 @@ def otomatik_0800_kontrol_islevi():
                 df_auto = pd.DataFrame(res.data)
                 df_auto = tablo_isimleri_degistir(df_auto)
                 
-                # SADECE O KULLANICININ FİRMASINA AİT ÜRÜNLER
                 if 'Firma' in df_auto.columns:
                     df_auto = df_auto[df_auto['Firma'].astype(str).str.strip().str.lower() == k_firma.lower()]
                 
@@ -561,12 +554,12 @@ else:
                     st.rerun()
                 else: st.error("Lütfen Stok Numarası ve Ürün Adı alanlarını doldurunuz.")
         else:
-            st.info("💡 **Akıllı Mal Kabul:** Gelen ürünlerin irsaliyesini, faturasını veya listesini fotoğraflayın. Yapay zeka tüm listeyi sizin için saniyeler içinde okuyup tabloya dönüştürecektir.")
+            st.info("💡 **Akıllı Mal Kabul:** Gelen ürünlerin irsaliyesini, faturasını veya listesini fotoğraflayın. Yapay zeka ürün adına bitişik yazılan SKT tarihlerini otomatik olarak ayıklayıp ayrı sütuna aktarır.")
             resim_dosyasi_giris = st.file_uploader("Fatura / Liste Fotoğrafı Yükleyin", type=['jpg', 'jpeg', 'png'], key="giris_foto")
 
             if resim_dosyasi_giris:
                 if st.button("🤖 Yapay Zekaya Okut ve Listeyi Çıkar"):
-                    with st.spinner("Yapay Zeka fatura/listeyi inceliyor, lütfen bekleyin..."):
+                    with st.spinner("Yapay Zeka liste ve SKT tarihlerini inceliyor, lütfen bekleyin..."):
                         try:
                             gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
                             if not gemini_api_key:
@@ -574,13 +567,16 @@ else:
                             else:
                                 genai.configure(api_key=gemini_api_key)
                                 model = genai.GenerativeModel('gemini-3.5-flash')
-                                prompt = """Sen uzman bir depo mal kabul asistanısın. Gönderdiğim fotoğrafta depoya giren ürünlerin bir faturası, irsaliyesi veya listesi bulunuyor. Tablodaki ürünleri oku ve her bir satır için sadece şu bilgileri çıkar: 
-                                - 'Stok No' (eğer belgede barkod/kod yoksa tamamen boş bırak), 
-                                - 'Ürün Adı', 
-                                - 'Miktar' (sadece rakam),
-                                - 'Birim' (Kg, Litre, Adet vb.). 
-                                Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya açıklama ekleme. 
-                                Örnek Format: [{"Stok No": "8920270048540", "Ürün Adı": "Domates Salçası", "Miktar": "50", "Birim": "Kg"}]"""
+                                prompt = """Sen uzman bir depo mal kabul asistanısın. Gönderdiğim fotoğrafta depoya giren ürünlerin bir listesi bulunuyor. Tablodaki her bir satırı oku ve şu 5 alanı çıkar:
+                                1. 'Stok No': Belgedeki stok numarası/kodu (yoksa boş bırak "").
+                                2. 'Ürün Adı': Ürün adını al ancak ürün adının içinde parantez içinde veya sonunda yer alan "(S.K.T.: ...)" veya "SKT: ..." gibi son kullanma tarihi ibarelerini ürün adından tamamen TEMİZLE. (Örnek: "ARPA ŞEHRİYE (S.K.T.: 30.07.2027)" -> "ARPA ŞEHRİYE").
+                                3. 'SKT': Ürün adının içinde parantez içinde "(S.K.T.: 30.07.2027)" şeklinde bitişik yazılmış veya ayrı sütunda yazılmış son kullanma tarihini bul ve KESİNLİKLE "YYYY-AA-GG" formatına çevir (Örnek: "30.07.2027" -> "2027-07-30"). Eğer üründe hiç SKT yazmıyorsa bugünün tarihini veya boş bırak "".
+                                4. 'Miktar': Kayıtlardaki miktar değeri (virgüllü ise noktaya çevirerek sayı olarak yaz, örn: 461.137).
+                                5. 'Birim': Ölçü birimi (KG -> Kg, AD -> Adet, LT -> Litre vb. standartlaştır).
+
+                                Bana SADECE geçerli bir JSON dizisi döndür, başka hiçbir metin veya markdown işareti ekleme.
+                                Örnek Format: [{"Stok No": "8920270048540", "Ürün Adı": "ARPA ŞEHRİYE", "SKT": "2027-07-30", "Miktar": 461.137, "Birim": "Kg"}]"""
+                                
                                 img = Image.open(resim_dosyasi_giris)
                                 response = model.generate_content([prompt, img])
 
@@ -589,20 +585,29 @@ else:
                                 elif json_text.startswith("```"): json_text = json_text.replace("```", "").strip()
 
                                 ai_data = json.loads(json_text)
-                                st.session_state['ai_giris_df'] = pd.DataFrame(ai_data)
-                                st.success("✅ Belge başarıyla okundu! Lütfen aşağıdaki tablodan verileri kontrol edip onaylayın.")
+                                df_ai = pd.DataFrame(ai_data)
+                                
+                                if 'SKT' not in df_ai.columns:
+                                    df_ai['SKT'] = bugun.strftime('%Y-%m-%d')
+                                else:
+                                    df_ai['SKT'] = df_ai['SKT'].replace(["", "None", "null", None], bugun.strftime('%Y-%m-%d')).fillna(bugun.strftime('%Y-%m-%d'))
+                                
+                                if 'Kritik Stok' not in df_ai.columns:
+                                    df_ai['Kritik Stok'] = 10
+
+                                st.session_state['ai_giris_df'] = df_ai
+                                st.success("✅ Belge başarıyla okundu ve SKT tarihleri ayrıştırıldı! Aşağıdan kontrol edip onaylayabilirsiniz.")
                         except Exception as e:
                             st.error(f"Sistem Hatası Detayı (Lütfen daha net bir fotoğraf deneyin): {str(e)}")
 
             if 'ai_giris_df' in st.session_state and st.session_state['ai_giris_df'] is not None:
                 st.markdown("### 🔍 Okunan Ürünleri Düzenle ve Onayla")
-                st.warning("⚠️ Lütfen 'Stok No'su boş gelen ürünlere benzersiz bir numara yazın. Ayrıca sağ taraftan ürünlerin SKT'sini (Son Kullanma Tarihi) ayarlamayı unutmayın.")
+                st.warning("⚠️ Ürün adlarının içindeki SKT bilgileri otomatik olarak 'SKT' sütununa taşındı. Kontrol edip onaylayabilirsiniz.")
                 
                 temp_df = st.session_state['ai_giris_df'].copy()
-                if 'SKT' not in temp_df.columns:
-                    temp_df['SKT'] = bugun.strftime('%Y-%m-%d')
-                if 'Kritik Stok' not in temp_df.columns:
-                    temp_df['Kritik Stok'] = 10
+                istenen_sirali = [c for c in ['Stok No', 'Ürün Adı', 'SKT', 'Miktar', 'Birim', 'Kritik Stok'] if c in temp_df.columns]
+                diger_sutunlar = [c for c in temp_df.columns if c not in istenen_sirali]
+                temp_df = temp_df[istenen_sirali + diger_sutunlar]
                 
                 with st.form("toplu_giris_onay"):
                     duzenlenmis_giris = st.data_editor(temp_df, use_container_width=True, hide_index=True)
@@ -622,22 +627,26 @@ else:
                         for i, r in duzenlenmis_giris.iterrows():
                             s_no = str(r.get('Stok No', '')).strip()
                             u_adi = str(r.get('Ürün Adı', '')).strip()
-                            miktar_val = guvenli_float(r.get('Miktar', 0))
+                            miktar_val = rakam_temizle(r.get('Miktar', 0))
                             birim_val = str(r.get('Birim', 'Adet')).strip()
                             skt_val = str(r.get('SKT', zaman)).strip()
-                            kritik_val = int(float(r.get('Kritik Stok', 10) or 10))
+                            kritik_val = int(guvenli_float(r.get('Kritik Stok', 10)) or 10)
                             
-                            if u_adi and miktar_val > 0 and s_no and s_no != "None" and s_no != "nan":
+                            if u_adi and miktar_val > 0 and s_no and s_no not in ["None", "nan", ""]:
                                 mevcut_urun = pd.DataFrame()
                                 if not df.empty:
-                                    mevcut_urun = df[df['Stok No'].astype(str).str.strip() == s_no]
+                                    # HEM STOK NO HEM DE SKT EŞLEŞMESİNE BAKILIR (FARKLI SKT'LER AYRI PARTİ OLARAK AÇILIR)
+                                    mevcut_urun = df[
+                                        (df['Stok No'].astype(str).str.strip() == s_no) & 
+                                        (df['SKT'].astype(str).str.strip() == skt_val)
+                                    ]
                                 
                                 if not mevcut_urun.empty:
                                     eski_miktar = float(mevcut_urun.iloc[0]['Miktar'])
                                     yeni_miktar = eski_miktar + miktar_val
                                     urun_id = int(mevcut_urun.iloc[0]['ID'])
-                                    supabase.table(aktif_tablo).update({"miktar": yeni_miktar, "skt": skt_val}).eq("id", urun_id).execute()
-                                    log_kaydet(k_adi, "GİRİŞ", u_adi, miktar_val, "Yapay Zeka Toplu Ekleme")
+                                    supabase.table(aktif_tablo).update({"miktar": yeni_miktar}).eq("id", urun_id).execute()
+                                    log_kaydet(k_adi, "GİRİŞ", f"{u_adi} (SKT: {skt_val})", miktar_val, "Yapay Zeka Toplu Ekleme")
                                 else:
                                     yeni_veri = {
                                         "stok_no": s_no, "urun_adi": u_adi, "miktar": miktar_val, "birim": birim_val,
@@ -647,12 +656,12 @@ else:
                                         "sozlesme_bitis_tarihi": "-", "sozlesme_kritik": 0.0, "sayim_eksigi": 0, "firma": f_adi
                                     }
                                     supabase.table(aktif_tablo).insert(yeni_veri).execute()
-                                    log_kaydet(k_adi, "YENİ KAYIT", u_adi, miktar_val, "Yapay Zeka Toplu Ekleme")
+                                    log_kaydet(k_adi, "YENİ KAYIT", f"{u_adi} (SKT: {skt_val})", miktar_val, "Yapay Zeka Toplu Ekleme")
                                 eklenen_sayisi += 1
                         
                         if eklenen_sayisi > 0:
                             st.session_state['ai_giris_df'] = None
-                            st.success(f"✅ Harika! Toplam {eklenen_sayisi} kalem ürün deponuza başarıyla eklendi.")
+                            st.success(f"✅ Harika! Toplam {eklenen_sayisi} kalem ürün kendi SKT partileriyle deponuza başarıyla eklendi.")
                             st.rerun()
                         else:
                             st.error("Hiçbir ürün eklenmedi. Lütfen ürünlerin Stok Numaralarının dolu olduğundan emin olun.")
